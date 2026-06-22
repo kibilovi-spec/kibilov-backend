@@ -1,0 +1,149 @@
+'use strict';
+const express = require('express');
+const router  = express.Router();
+
+// VIN Confidence Score
+function calcConfidence(vehicle) {
+  let score = 0;
+  if (vehicle.make)   score += 30;
+  if (vehicle.model)  score += 30;
+  if (vehicle.year)   score += 20;
+  if (vehicle.engine) score += 10;
+  return score;
+}
+
+
+// ── VIN Decode ────────────────────────────────────────────────────────────
+router.get('/decode', async (req, res) => {
+  try {
+    const { vin } = req.query;
+
+    if (!vin || vin.length !== 17) {
+      return res.status(400).json({ error: 'VIN 17 სიმბოლო უნდა იყოს' });
+    }
+
+    // Autodoc VIN Decoder
+    const vinResolver = require('../services/vinResolver');
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    const resolved = await vinResolver.resolveVIN(vin, prisma);
+    await prisma.$disconnect();
+    if (!resolved || !resolved.make) throw new Error('VIN ვერ მოიძებნა');
+    const vehicle = {
+      make: resolved.make,
+      model: resolved.model || null,
+      year: resolved.year || null,
+      engine: resolved.engine || null,
+      fuel: resolved.fuel || null,
+    };
+    const confidence = calcConfidence(vehicle);
+
+    // Confidence label
+    let confidenceLabel, confidenceColor;
+    if (confidence >= 95) {
+      confidenceLabel = '✅ match დადასტურებულია';
+      confidenceColor = 'green';
+    } else if (confidence >= 70) {
+      confidenceLabel = '⚠️ წელი გადაამოწმეთ';
+      confidenceColor = 'yellow';
+    } else {
+      confidenceLabel = '❌ VIN ხელით შეიყვანეთ';
+      confidenceColor = 'red';
+    }
+
+    res.json({ vehicle, confidence, confidenceLabel, confidenceColor });
+
+  } catch (e) {
+    // VIN ვერ მოიძებნა → manual form
+    res.status(503).json({
+      error:      'VIN lookup მიუწვდომელია',
+      showManual: true,
+    });
+  }
+});
+
+module.exports = router;
+
+// POST /api/vin/batch — B2B: 20 VIN ერთდროულად
+router.post('/batch', async (req, res) => {
+  try {
+    const { vins } = req.body;
+    if (!Array.isArray(vins) || vins.length === 0) {
+      return res.status(400).json({ error: 'VIN სია ცარიელია' });
+    }
+    if (vins.length > 20) {
+      return res.status(400).json({ error: 'მაქსიმუმ 20 VIN' });
+    }
+
+    const results = await Promise.allSettled(
+      vins.map(async (vin) => {
+        vin = vin.trim().toUpperCase();
+        if (vin.length !== 17) return { vin, error: 'VIN 17 სიმბოლო უნდა იყოს' };
+        try {
+          const vinResolver = require('../services/vinResolver');
+          const { PrismaClient } = require('@prisma/client');
+          const prisma = new PrismaClient();
+          const resolved = await vinResolver.resolveVIN(vin, prisma);
+          await prisma.$disconnect();
+          if (!resolved || !resolved.make) return { vin, error: 'VIN ვერ მოიძებნა' };
+          const vehicle = {
+            make: resolved.make, model: resolved.model || null,
+            year: resolved.year || null, engine: resolved.engine || null,
+          };
+          let score = 0;
+          if (vehicle.make)   score += 30;
+          if (vehicle.model)  score += 30;
+          if (vehicle.year)   score += 20;
+          if (vehicle.engine) score += 10;
+          score += 10;
+          return { vin, vehicle, confidence: score };
+        } catch {
+          return { vin, error: 'lookup მიუწვდომელია' };
+        }
+      })
+    );
+
+    const decoded = results.map(r =>
+      r.status === 'fulfilled' ? r.value : { vin: '', error: 'შეცდომა' }
+    );
+
+    res.json({ decoded, total: decoded.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/vin/ocr — ფოტოდან VIN წაკითხვა
+router.post('/ocr', async (req, res) => {
+  try {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', async () => {
+      try {
+        const buffer = Buffer.concat(chunks);
+        if (!buffer.length) return res.status(400).json({ error: 'ფაილი ცარიელია' });
+
+        const { createWorker } = require('tesseract.js');
+        const worker = await createWorker('eng');
+        await worker.setParameters({
+          tessedit_char_whitelist: 'ABCDEFGHJKLMNPRSTUVWXYZ0123456789',
+        });
+        const { data: { text } } = await worker.recognize(buffer);
+        await worker.terminate();
+
+        const cleaned = text.replace(/[^A-HJ-NPR-Z0-9]/g, '').toUpperCase();
+        const vinMatch = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/);
+
+        if (!vinMatch) {
+          return res.json({ vin: null, raw: cleaned, message: 'VIN ვერ მოიძებნა სურათში' });
+        }
+
+        res.json({ vin: vinMatch[0], raw: cleaned });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});

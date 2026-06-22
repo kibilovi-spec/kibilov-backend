@@ -44,6 +44,7 @@ router.post('/register', [
   const hash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({ data:{ name, email, password:hash, phone, lang } });
   await prisma.cart.create({ data:{ userId: user.id } });
+  try { const { notifyNewUser } = require('../services/notification'); notifyNewUser(user); } catch(e) {}
 
   const { accessToken, refreshToken } = makeTokens(user);
   await prisma.refreshToken.create({ data:{ token:refreshToken, userId:user.id, expiresAt: new Date(Date.now()+30*24*60*60*1000) } });
@@ -127,3 +128,79 @@ router.put('/me', authenticate, async (req, res) => {
 });
 
 module.exports = router;
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req, res) => {
+  const { email, lang = 'ka' } = req.body;
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return res.json({ success: true, message: 'თუ email რეგისტრირებულია, კოდი გაიგზავნება' });
+
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 წუთი
+
+  await prisma.passwordReset.upsert({
+    where: { email },
+    create: { email, code, expiresAt },
+    update: { code, expiresAt },
+  });
+
+  const { sendEmail } = require('../services/notification');
+  await sendEmail({
+    to: email,
+    subject: 'პაროლის აღდგენა — Kibilov AutoParts',
+    html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto">
+      <h2 style="color:#1565C0">პაროლის აღდგენა</h2>
+      <p>თქვენი აღდგენის კოდია:</p>
+      <div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;padding:20px;background:#f4f6f9;border-radius:8px">${code}</div>
+      <p style="color:#666;font-size:13px">კოდი მოქმედებს 15 წუთი</p>
+    </div>`,
+  });
+
+  res.json({ success: true, message: 'კოდი გაიგზავნა email-ზე' });
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+  const { email, code, password } = req.body;
+  const record = await prisma.passwordReset.findUnique({ where: { email } });
+  if (!record || record.code !== code || record.expiresAt < new Date())
+    return res.status(400).json({ success: false, message: 'კოდი არასწორია ან ვადა გაუვიდა' });
+
+  const hash = await require('bcryptjs').hash(password, 12);
+  await prisma.user.update({ where: { email }, data: { password: hash } });
+  await prisma.passwordReset.delete({ where: { email } });
+
+  res.json({ success: true, message: 'პაროლი წარმატებით შეიცვალა' });
+});
+
+// POST /api/auth/b2b-apply
+router.post('/b2b-apply', async (req, res) => {
+  try {
+    const { companyName, contactName, phone, address, taxId, description, email, password } = req.body;
+    if (!companyName || !contactName || !phone) return res.status(400).json({ message: 'შეავსეთ სავალდებულო ველები' });
+    if (!email || !password) return res.status(400).json({ message: 'Email და პაროლი სავალდებულოა' });
+    const bcrypt = require('bcryptjs');
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) return res.status(400).json({ message: 'ეს Email უკვე გამოყენებულია' });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: { email, password: hashedPassword, name: contactName, phone, role: 'USER', b2bStatus: 'PENDING', b2bAppliedAt: new Date() }
+    });
+    try {
+      const { sendTelegram } = require('../services/notification');
+      await sendTelegram(`🏢 <b>B2B განაცხადი</b>
+🏢 ${companyName}
+👤 ${contactName} | 📞 ${phone}
+📧 ${email}
+🆔 ${taxId||'—'}`);
+    } catch(e) {}
+    try {
+      const { sendEmail } = require('../services/email');
+      await sendEmail({ to: process.env.ADMIN_EMAIL, subject: '🏢 B2B განაცხადი — ' + companyName,
+        html: `<h2>B2B განაცხადი</h2><p><b>კომპანია:</b> ${companyName}</p><p><b>Email:</b> ${email}</p><p><b>ტელ:</b> ${phone}</p><br><a href="https://kibilov.ge/admin/b2b">Admin B2B →</a>` });
+      await sendEmail({ to: email, subject: '✅ B2B განაცხადი მიღებულია — kibilov.ge',
+        html: `<h2>გამარჯობა, ${contactName}!</h2><p>თქვენი B2B განაცხადი <b>მიღებულია</b>. 1-2 სამუშაო დღეში დაგიკავშირდებით.</p><p>პატივისცემით,<br>kibilov.ge</p>` });
+    } catch(e) {}
+    res.json({ ok: true, message: 'B2B განაცხადი გაგზავნილია! ადმინი 1-2 სამუშაო დღეში დაგიკავშირდება.' });
+  } catch (e) { res.status(500).json({ message: e.message }); }
+});

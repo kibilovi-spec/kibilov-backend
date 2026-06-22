@@ -3,93 +3,176 @@ const router = require('express').Router();
 const { prisma, authenticate, requireAdmin } = require('../middleware/auth');
 
 router.get('/', async (req, res) => {
-  const lang = req.query.lang || 'ka';
-  const L = lang.charAt(0).toUpperCase() + lang.slice(1);
+  try {
+    const cache = require('../services/cache');
+    const cacheKey = 'categories:autodoc:v1';
+    const cached = await cache.get(cacheKey);
+    if (cached) return res.json({ success: true, data: cached });
 
-  const cats = await prisma.category.findMany({
-    where: { isActive: true, parentId: null },
-    orderBy: { order: 'asc' },
-    include: {
-      children: {
-        where: { isActive: true },
-        orderBy: { order: 'asc' },
-        include: {
-          _count: { select: { products: { where: { isActive: true } } } }
-        }
-      },
-      _count: { select: { products: { where: { isActive: true } } } }
-    },
-  });
+    const parents = await prisma.$queryRaw`
+      SELECT ac.autodoc_id as id, ac.name_en as name, ac.name_ka, ac.slug,
+        COUNT(DISTINCT p.id)::int as product_count
+      FROM autodoc_categories ac
+      LEFT JOIN products p ON p.autodoc_category_id = ac.autodoc_id AND p."isActive" = true
+      WHERE ac.level = 1
+      GROUP BY ac.autodoc_id, ac.name_en, ac.name_ka, ac.slug
+      ORDER BY COUNT(DISTINCT p.id) DESC
+    `;
 
-  res.json({
-    success: true,
-    data: cats.map(c => {
-      const childCount = c.children.reduce((sum, ch) => sum + ch._count.products, 0);
-      const totalCount = c._count.products + childCount;
+    const result = await Promise.all(parents.map(async (c) => {
+      const children = await prisma.$queryRaw`
+        SELECT ac.autodoc_id as id, ac.slug, ac.name_ka, ac.name_en as name, ac.image_url,
+          COUNT(DISTINCT p.id)::int as product_count
+        FROM autodoc_categories ac
+        LEFT JOIN products p ON p.autodoc_category_id = ac.autodoc_id AND p."isActive" = true
+        WHERE ac.parent_id = ${c.id} AND ac.level = 2
+        GROUP BY ac.autodoc_id, ac.slug, ac.name_ka, ac.name_en, ac.image_url
+        ORDER BY COUNT(DISTINCT p.id) DESC
+      `;
+      const childCount = children.reduce((s, ch) => s + Number(ch.product_count), 0);
       return {
-        id: c.id,
-        slug: c.slug,
-        icon: c.icon,
-        name: c['name' + L] || c.nameKa,
-        productCount: totalCount,
-        subcategories: c.children.map(s => ({
-          id: s.id,
-          slug: s.slug,
-          name: s['name' + L] || s.nameKa,
-          productCount: s._count.products
+        id: String(c.id),
+        slug: c.slug || String(c.id),
+        name: c.name_ka || c.name, nameKa: c.name_ka || c.name, nameEn: c.name,
+        icon: `/images/categories/${c.id}.png`,
+        imageUrl: `/images/categories/${c.id}.png`,
+        productCount: Number(c.product_count) + childCount,
+        subcategories: children.map(s => ({
+          id: String(s.id), slug: s.slug || String(s.id),
+          name: s.name_ka || s.name, nameKa: s.name_ka || s.name, nameEn: s.name,
+          imageUrl: s.image_url || null,
+          productCount: Number(s.product_count)
         }))
       };
-    })
-  });
+    }));
+
+    const filtered = result.filter(c => c.productCount > 0);
+    await cache.set(cacheKey, filtered, 3600);
+    res.json({ success: true, data: filtered });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+
+// Autodoc Category Tree - recursive hierarchy
+router.get('/autodoc-tree', async (req, res) => {
+  // Cache for 1 hour
+  const cacheKey = 'autodoc-tree-v2';
+  try {
+    const { getCache, setCache } = require('../services/cache');
+    const cached = await getCache(cacheKey);
+    if (cached) return res.json({ success: true, data: cached });
+  } catch(e) {}
+
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT autodoc_id, parent_id, name_en, name_ka, slug, level, image_url, 0::int as product_count
+      FROM autodoc_categories
+      WHERE is_active = true
+      ORDER BY level, autodoc_id
+    `;
+
+    // Build map
+    const map = {};
+    for (const r of rows) {
+      map[r.autodoc_id] = {
+        id: r.autodoc_id,
+        parentId: r.parent_id,
+        nameEn: r.name_en,
+        nameKa: r.name_ka || r.name_en,
+        slug: r.slug,
+        level: r.level,
+        imageUrl: r.image_url,
+        productCount: Number(r.product_count) || 0,
+        children: []
+      };
+    }
+
+    // Build tree (max depth 2 for performance)
+    const roots = [];
+    for (const node of Object.values(map)) {
+      if (node.parentId && map[node.parentId]) {
+        map[node.parentId].children.push(node);
+      } else if (!node.parentId) {
+        roots.push(node);
+      }
+    }
+    // Strip grandchildren to reduce payload size
+    for (const root of roots) {
+      for (const child of root.children) {
+        child.children = [];
+      }
+    }
+
+    try {
+      const { setCache } = require('../services/cache');
+      await setCache(cacheKey, roots, 3600);
+    } catch(e) {}
+    res.json({ success: true, data: roots });
+  } catch (e) {
+    console.error('autodoc-tree error:', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+
+// All categories for SEO/sitemap (includes empty ones)
+router.get('/all-slugs', async (req, res) => {
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT autodoc_id as id, slug, name_ka, name_en, level, parent_id
+      FROM autodoc_categories
+      WHERE is_active = true
+      ORDER BY level, autodoc_id
+    `;
+    res.json({ success: true, data: rows.map(r => ({
+      id: r.id, slug: r.slug, nameKa: r.name_ka || r.name_en, nameEn: r.name_en, level: r.level, parentId: r.parent_id
+    }))});
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 router.get('/:slugOrId', async (req, res) => {
-  const lang = req.query.lang || 'ka';
-  const L = lang.charAt(0).toUpperCase() + lang.slice(1);
-
-  const cat = await prisma.category.findFirst({
-    where: { OR: [{ id: req.params.slugOrId }, { slug: req.params.slugOrId }] },
-    include: {
-      children: {
-        include: {
-          _count: { select: { products: { where: { isActive: true } } } }
+  try {
+    const id = parseInt(req.params.slugOrId);
+    if (!isNaN(id)) {
+      // Autodoc category by ID
+      const cat = await prisma.$queryRaw`
+        SELECT autodoc_id as id, name_en as name, parent_id, level
+        FROM autodoc_categories WHERE autodoc_id = ${id}
+      `;
+      if (!cat.length) return res.status(404).json({ success: false, message: 'კატეგორია ვერ მოიძებნა' });
+      const c = cat[0];
+      const children = await prisma.$queryRaw`
+        SELECT ac.autodoc_id as id, ac.name_en as name,
+          COUNT(DISTINCT p.id)::int as product_count
+        FROM autodoc_categories ac
+        LEFT JOIN products p ON p.autodoc_category_id = ac.autodoc_id AND p."isActive" = true
+        WHERE ac.parent_id = ${id}
+        GROUP BY ac.autodoc_id, ac.name_en
+        ORDER BY COUNT(DISTINCT p.id) DESC
+      `;
+      const prodCount = await prisma.$queryRaw`
+        SELECT COUNT(*)::int as cnt FROM products
+        WHERE autodoc_category_id = ${id} AND "isActive" = true
+      `;
+      return res.json({
+        success: true,
+        data: {
+          id: String(c.id), slug: String(c.id),
+          name: c.name, nameKa: c.name, nameEn: c.name,
+          productCount: Number(prodCount[0]?.cnt || 0),
+          subcategories: children.map(s => ({
+            id: String(s.id), slug: String(s.id),
+            name: s.name, nameKa: s.name, nameEn: s.name,
+            productCount: Number(s.product_count)
+          }))
         }
-      },
-      _count: { select: { products: { where: { isActive: true } } } }
+      });
     }
-  });
-
-  if (!cat) return res.status(404).json({ success: false, message: 'კატეგორია ვერ მოიძებნა' });
-
-  const childCount = cat.children.reduce((sum, ch) => sum + ch._count.products, 0);
-  const totalCount = cat._count.products + childCount;
-
-  res.json({
-    success: true,
-    data: {
-      id: cat.id,
-      slug: cat.slug,
-      icon: cat.icon,
-      name: cat['name' + L] || cat.nameKa,
-      productCount: totalCount,
-      subcategories: cat.children.map(s => ({
-        id: s.id,
-        slug: s.slug,
-        name: s['name' + L] || s.nameKa,
-        productCount: s._count.products
-      }))
-    }
-  });
+    return res.status(404).json({ success: false, message: 'კატეგორია ვერ მოიძებნა' });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
-
-router.post('/', authenticate, requireAdmin, async (req, res) => {
-  const cat = await prisma.category.create({ data: req.body });
-  res.status(201).json({ success: true, data: cat });
-});
-
-router.put('/:id', authenticate, requireAdmin, async (req, res) => {
-  const cat = await prisma.category.update({ where: { id: req.params.id }, data: req.body });
-  res.json({ success: true, data: cat });
-});
-
 module.exports = router;

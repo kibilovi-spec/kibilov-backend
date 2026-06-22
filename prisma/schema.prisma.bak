@@ -1,0 +1,343 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Users ──────────────────────────────────────────────────────────────────
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  phone         String?
+  password      String
+  role          Role           @default(USER)
+  lang          String         @default("ka")
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  addresses     Address[]
+  orders        Order[]
+  cart          Cart?
+  refreshTokens RefreshToken[]
+  vehicles    UserVehicle[]
+  wishlist    Wishlist[]
+
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Address {
+  id        String       @id @default(uuid())
+  userId    String
+  label     String       @default("მთავარი")
+  city      String
+  zone      DeliveryZone @default(OTHER)
+  street    String
+  apartment String?
+  isDefault Boolean      @default(false)
+  createdAt DateTime     @default(now())
+
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders    Order[]
+
+  @@map("addresses")
+}
+
+enum DeliveryZone {
+  TBILISI
+  RUSTAVI
+  MTSKHETA
+  GORI
+  KUTAISI
+  OTHER
+}
+
+// ── Products / Inventory ───────────────────────────────────────────────────
+model Category {
+  id        String     @id @default(uuid())
+  slug      String     @unique
+  nameKa    String
+  nameEn    String
+  nameRu    String
+  icon      String     @default("🔧")
+  order     Int        @default(0)
+  parentId  String?
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  products  Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id            String    @id @default(uuid())
+  finaId        String?   @unique
+  sku           String    @unique
+  brand         String
+  nameKa        String
+  nameEn        String    @default("")
+  nameRu        String    @default("")
+  descriptionKa String?
+  descriptionEn String?
+  descriptionRu String?
+  articleNumber String?
+  compatibility String?   // JSON array string: ["BMW 3 E90","Toyota Camry"]
+  categoryId    String?
+  price         Decimal   @db.Decimal(10, 2)
+  priceOld      Decimal?  @db.Decimal(10, 2)
+  discount      Int       @default(0)
+  stock         Int       @default(0)
+  unit          String    @default("ც")
+  badge         Badge?
+  rating        Decimal   @default(0) @db.Decimal(3, 2)
+  reviewCount   Int       @default(0)
+  images        String[]
+  imagePublicIds String[] // Cloudinary public IDs for deletion
+  isActive      Boolean   @default(true)
+  isFeatured    Boolean   @default(false)
+  weight        Decimal?  @db.Decimal(8, 3)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  category      Category?   @relation(fields: [categoryId], references: [id])
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+  wishlist      Wishlist[]
+
+  @@map("products")
+}
+
+enum Badge {
+  SALE
+  NEW
+  TOP
+  HIT
+}
+
+// ── Vehicle compatibility ─────────────────────────────────────────────────
+model VehicleMake {
+  id     String         @id @default(uuid())
+  name   String         @unique
+  models VehicleModel[]
+
+  @@map("vehicle_makes")
+}
+
+model VehicleModel {
+  id       String      @id @default(uuid())
+  makeId   String
+  name     String
+  yearFrom Int?
+  yearTo   Int?
+
+  make     VehicleMake @relation(fields: [makeId], references: [id], onDelete: Cascade)
+
+  @@unique([makeId, name])
+  @@map("vehicle_models")
+}
+
+// ── Cart ───────────────────────────────────────────────────────────────────
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  productId String
+  qty       Int      @default(1)
+  createdAt DateTime @default(now())
+
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id])
+
+  @@unique([cartId, productId])
+  @@map("cart_items")
+}
+
+// ── Orders ─────────────────────────────────────────────────────────────────
+model Order {
+  id              String        @id @default(uuid())
+  orderNumber     String        @unique @default(cuid())
+  userId          String
+  addressId       String?
+  deliveryZone    DeliveryZone  @default(OTHER)
+  deliveryFee     Decimal       @db.Decimal(10, 2) @default(0)
+  subtotal        Decimal       @db.Decimal(10, 2)
+  total           Decimal       @db.Decimal(10, 2)
+  status          OrderStatus   @default(PENDING)
+  paymentMethod   PaymentMethod @default(CASH)
+  paymentStatus   PaymentStatus @default(UNPAID)
+  paymentId       String?
+  paymentUrl      String?
+  customerName    String
+  customerPhone   String        @default("")
+  customerEmail   String?
+  deliveryAddress String        @default("")
+  note            String?
+  lang            String        @default("ka")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user    User        @relation(fields: [userId], references: [id])
+  address Address?    @relation(fields: [addressId], references: [id])
+  items   OrderItem[]
+  payment Payment?
+
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BOG
+  TBC
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  productId String
+  nameKa    String
+  nameEn    String  @default("")
+  nameRu    String  @default("")
+  sku       String  @default("")
+  brand     String  @default("")
+  price     Decimal @db.Decimal(10, 2)
+  qty       Int
+  total     Decimal @db.Decimal(10, 2)
+
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model Payment {
+  id           String        @id @default(uuid())
+  orderId      String        @unique
+  provider     String
+  externalId   String?
+  amount       Decimal       @db.Decimal(10, 2)
+  currency     String        @default("GEL")
+  status       PaymentStatus @default(UNPAID)
+  redirectUrl  String?
+  callbackData Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  order        Order         @relation(fields: [orderId], references: [id])
+
+  @@map("payments")
+}
+
+// ── Delivery zones config ─────────────────────────────────────────────────
+model DeliveryZoneConfig {
+  zone         DeliveryZone @id
+  fee          Decimal      @db.Decimal(10, 2) @default(0)
+  freeFrom     Decimal      @db.Decimal(10, 2) @default(150)
+  enabled      Boolean      @default(true)
+  estimatedDays Int         @default(1)
+  label        String       @default("")
+
+  @@map("delivery_zone_configs")
+}
+
+// ── FINA Sync ──────────────────────────────────────────────────────────────
+model FinaSyncLog {
+  id           String   @id @default(uuid())
+  status       String
+  message      String?
+  itemsAdded   Int      @default(0)
+  itemsUpdated Int      @default(0)
+  itemsSynced  Int      @default(0)
+  duration     Int?
+  createdAt    DateTime @default(now())
+
+  @@map("fina_sync_logs")
+}
+model PasswordReset {
+  email     String   @id
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("password_resets")
+}
+
+model UserVehicle {
+  id        String   @id @default(uuid())
+  userId    String
+  make      String
+  model     String
+  year      Int
+  engine      String?
+  fuelType    String?
+  displacement String?
+  isMain      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_vehicles")
+}
+
+model Wishlist {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("wishlists")
+}

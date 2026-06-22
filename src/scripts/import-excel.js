@@ -9,6 +9,7 @@ require('dotenv').config();
 const XLSX   = require('xlsx');
 const path   = require('path');
 const { PrismaClient } = require('@prisma/client');
+const { calcB2BPrice } = require('../services/pricing');
 const prisma = new PrismaClient();
 
 // ─── კატეგორიების ავტო-განსაზღვრა დასახელებიდან ─────────────────────────
@@ -126,7 +127,17 @@ async function main() {
   for (const row of rows) {
     try {
       const code    = row[COL.code]?.toString().trim();
-      const name    = row[COL.name]?.toString().trim();
+      const rawName = row[COL.name]?.toString().trim() || '';
+
+      // B სვეტიდან OEM კოდების ამოღება: "სახელი | OEM1, OEM2 |"
+      const oemMatch = rawName.match(/\|([^|]+)\|/);
+      const oemFromB = oemMatch
+        ? oemMatch[1].split(',').map(c => c.trim()).filter(c => c.length >= 4)
+        : [];
+
+      // A სვეტის კოდიც oemCodes-ში
+      const oemCodes = code ? [code, ...oemFromB] : oemFromB;
+      const name = rawName.split('|')[0].trim();
       const unit    = row[COL.unit]?.toString().trim() || 'ც';
       const stock   = Math.max(0, parseInt(row[COL.stock]) || 0);
       const costRaw = parseFloat(row[COL.cost]) || 0;
@@ -152,11 +163,14 @@ async function main() {
         nameEn:    name,   // will be translated later if needed
         nameRu:    name,
         price:     parseFloat(salePrice.toFixed(2)),
+        b2bPrice:  calcB2BPrice(parseFloat(salePrice.toFixed(2))),
         stock,
         unit,
         categoryId: catId,
         isActive:  true,
         images:    [],
+        oemCodes:  oemCodes,
+        alternativeSearchKeys: oemCodes,
         imagePublicIds: [],
         discount:  0,
         rating:    0,

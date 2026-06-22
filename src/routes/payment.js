@@ -72,6 +72,20 @@ router.post('/bog/init', authenticate, async (req, res) => {
 router.post('/bog/callback', async (req, res) => {
   try {
     const { order_id, status, payment_hash } = req.body;
+
+    // ✅ BOG signature verification
+    if (process.env.BOG_CLIENT_SECRET && payment_hash) {
+      const crypto = require('crypto');
+      const expected = crypto
+        .createHmac('sha256', process.env.BOG_CLIENT_SECRET)
+        .update(order_id + status)
+        .digest('hex');
+      if (expected !== payment_hash) {
+        console.error('[BOG] Invalid payment_hash — possible fraud attempt');
+        return res.status(400).send('Invalid signature');
+      }
+    }
+
     const order = await prisma.order.findFirst({ where: { paymentId: order_id }});
     if (!order) return res.status(404).send('Order not found');
 

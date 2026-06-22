@@ -1,0 +1,192 @@
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
+const HOST = 'autodoc-parts-catalog.p.rapidapi.com';
+const BASE = `https://${HOST}`;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function safeCall(url, retries = 2) {
+  const headers = { 'x-rapidapi-key': RAPIDAPI_KEY, 'x-rapidapi-host': HOST };
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const r = await fetch(url, { headers });
+      const text = await r.text();
+      if (!text.trim().startsWith('{') && !text.trim().startsWith('[')) {
+        if (i < retries) { await sleep(300 * (i + 1)); continue; }
+        return null;
+      }
+      return JSON.parse(text);
+    } catch(e) {
+      if (i < retries) await sleep(300 * (i + 1));
+    }
+  }
+  return null;
+}
+
+async function decodeV3(vin) {
+  // v3 endpoint — fallback to v2 if unavailable
+  const d = await safeCall(`${BASE}/api/vin/decoder-v3/${vin}`);
+  if (d && Array.isArray(d)) {
+    const info = d.find(s => s.title === 'General information')?.information || {};
+    if (info.Make) return {
+      make: info.Make,
+      model: info.Model || null,
+      year: info['Model year'] ? parseInt(info['Model year']) : null,
+      chassis: info['Trim level'] || null,
+      body: info['Body style'] || null,
+      source: 'v3',
+      confidence: 0.95,
+    };
+  }
+  // v2 fallback
+  const d2 = await safeCall(`${BASE}/api/vin/decoder-v2/${vin}`);
+  if (d2 && d2.make) return {
+    make: d2.make,
+    model: d2.model || null,
+    year: d2.model_year ? parseInt(d2.model_year) : null,
+    chassis: d2.trim || null,
+    body: d2.body_class || null,
+    source: 'v2_fallback',
+    confidence: 0.90,
+  };
+  return null;
+}
+
+async function decodeV1(vin) {
+  const d = await safeCall(`${BASE}/api/vin/decoder-v1/${vin}`);
+  if (!d || !d.manufacturer) return null;
+  return {
+    make: d.manufacturer,
+    model: null,
+    year: null,
+    region: d.region || null,
+    source: 'v1',
+    confidence: 0.50,
+  };
+}
+
+async function decodeNHTSA(vin) {
+  try {
+    const r = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${vin}?format=json`);
+    const d = await r.json();
+    const res = d.Results && d.Results[0];
+    if (!res || !res.Make || res.Make === 'NOT SPECIFIED' || res.Make === '') return null;
+    return {
+      make: res.Make,
+      model: res.Model || null,
+      year: res.ModelYear ? parseInt(res.ModelYear) : null,
+      engine: res.DisplacementL ? parseFloat(res.DisplacementL).toFixed(1) + 'L' : null,
+      fuel: res.FuelTypePrimary || null,
+      source: 'nhtsa',
+      confidence: 0.80,
+    };
+  } catch(e) { return null; }
+}
+
+async function decodeFromCache(vin, prisma) {
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT vehicle_id, manufacturer, model, year, engine, fuel
+      FROM vehicle_cache WHERE vin = ${vin.toUpperCase()} AND model != '' LIMIT 1
+    `;
+    if (!rows || !rows.length) return null;
+    const row = rows[0];
+    return {
+      make: row.manufacturer,
+      model: row.model,
+      year: row.year ? parseInt(row.year) : null,
+      engine: row.engine || null,
+      vehicleId: row.vehicle_id,
+      source: 'cache',
+      confidence: 1.0,
+    };
+  } catch(e) { return null; }
+}
+
+async function saveToCache(vin, data, prisma) {
+  if (!data || !data.make || !data.model) return;
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO vehicle_cache (vehicle_id, vin, manufacturer, model, year, engine, fuel)
+      VALUES (${vin}, ${vin}, ${data.make}, ${data.model}, ${String(data.year || '')}, ${data.engine || ''}, ${data.fuel || ''})
+      ON CONFLICT (vin) DO UPDATE SET
+        manufacturer = EXCLUDED.manufacturer,
+        model = EXCLUDED.model,
+        year = EXCLUDED.year,
+        updated_at = NOW()
+    `;
+  } catch(e) {}
+}
+
+async function resolveVIN(vin, prisma) {
+  if (!vin || vin.length !== 17) return null;
+  const vinUpper = vin.toUpperCase();
+
+  const cached = await decodeFromCache(vinUpper, prisma);
+  if (cached) return cached;
+
+  const v3 = await decodeV3(vinUpper);
+  if (v3 && v3.make) {
+    await saveToCache(vinUpper, v3, prisma);
+    return v3;
+  }
+
+  const nhtsa = await decodeNHTSA(vinUpper);
+  if (nhtsa && nhtsa.make) {
+    await saveToCache(vinUpper, nhtsa, prisma);
+    return nhtsa;
+  }
+
+  const v1 = await decodeV1(vinUpper);
+  if (v1 && v1.make) return v1;
+
+  return null;
+}
+
+module.exports = { resolveVIN };
+
+// Chassis → Autodoc modelId mapping
+const CHASSIS_TO_MODEL = {
+  'E65': 4816, 'E66': 4816, 'E67': 4816,
+  'E46': 548,  'E90': 5765, 'E91': 5766, 'E92': 5767,
+  'E39': 545,  'E60': 5764, 'E61': 5764,
+  'W204': 6230, 'W211': 3303, 'W124': 1236, 'W210': 3028,
+};
+
+async function resolveVehicleId(vinData, prisma) {
+  if (!vinData) return null;
+
+  // 1. Check vehicle_cache by model+make
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT vehicle_id FROM vehicle_cache
+      WHERE LOWER(manufacturer) = LOWER(${vinData.make || ''})
+      AND LOWER(model) LIKE ${('%' + (vinData.chassis || vinData.model || '') + '%').toLowerCase()}
+      LIMIT 1
+    `;
+    if (rows?.length) return rows[0].vehicle_id;
+  } catch(e) {}
+
+  // 2. Chassis code lookup
+  if (vinData.chassis) {
+    const modelId = CHASSIS_TO_MODEL[vinData.chassis.toUpperCase()];
+    if (modelId) return String(modelId);
+  }
+
+  return null;
+}
+
+async function prefetchOEMCategories(vehicleId, prisma) {
+  if (!vehicleId) return [];
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT DISTINCT category, COUNT(*) as cnt
+      FROM vehicle_oem
+      WHERE vehicle_id = ${String(vehicleId)}
+      GROUP BY category
+      ORDER BY cnt DESC
+      LIMIT 20
+    `;
+    return rows.map(r => ({ categoryId: r.category, count: Number(r.cnt) }));
+  } catch(e) { return []; }
+}
+
+module.exports = { resolveVIN, resolveVehicleId, prefetchOEMCategories };

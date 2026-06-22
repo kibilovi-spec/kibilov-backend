@@ -7,30 +7,35 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ── Users ──────────────────────────────────────────────────────────────────
 model User {
-  id            String         @id @default(uuid())
-  name          String
-  email         String         @unique
-  phone         String?
-  password      String
-  role          Role           @default(USER)
-  lang          String         @default("ka")
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-
-  addresses     Address[]
-  orders        Order[]
-  cart          Cart?
-  refreshTokens RefreshToken[]
+  id                   String                @id @default(uuid())
+  name                 String
+  email                String                @unique
+  phone                String?
+  password             String
+  role                 Role                  @default(USER)
+  lang                 String                @default("ka")
+  isActive             Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  b2bAppliedAt         DateTime?
+  b2bCreditDueDate     DateTime?
+  b2bCreditLimit       Decimal?              @db.Decimal(10, 2)
+  b2bStatus            String?
+  b2bTier              String?               @default("STANDARD")
+  garageCity           String?
+  isPartnerGarage      Boolean               @default(false)
+  addresses            Address[]
+  cart                 Cart?
+  orders               Order[]
+  reviews              ProductReview[]
+  refreshTokens        RefreshToken[]
+  supplier             Supplier?
+  vehicles             UserVehicle[]
+  wishlist             Wishlist[]
+  maintenanceReminders MaintenanceReminder[]
 
   @@map("users")
-}
-
-enum Role {
-  USER
-  ADMIN
 }
 
 model RefreshToken {
@@ -39,7 +44,6 @@ model RefreshToken {
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
-
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
@@ -55,23 +59,12 @@ model Address {
   apartment String?
   isDefault Boolean      @default(false)
   createdAt DateTime     @default(now())
-
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders    Order[]
 
   @@map("addresses")
 }
 
-enum DeliveryZone {
-  TBILISI
-  RUSTAVI
-  MTSKHETA
-  GORI
-  KUTAISI
-  OTHER
-}
-
-// ── Products / Inventory ───────────────────────────────────────────────────
 model Category {
   id        String     @id @default(uuid())
   slug      String     @unique
@@ -83,7 +76,6 @@ model Category {
   parentId  String?
   isActive  Boolean    @default(true)
   createdAt DateTime   @default(now())
-
   parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children  Category[] @relation("CategoryTree")
   products  Product[]
@@ -92,50 +84,57 @@ model Category {
 }
 
 model Product {
-  id            String    @id @default(uuid())
-  finaId        String?   @unique
-  sku           String    @unique
-  brand         String
-  nameKa        String
-  nameEn        String    @default("")
-  nameRu        String    @default("")
-  descriptionKa String?
-  descriptionEn String?
-  descriptionRu String?
-  articleNumber String?
-  compatibility String?   // JSON array string: ["BMW 3 E90","Toyota Camry"]
-  categoryId    String?
-  price         Decimal   @db.Decimal(10, 2)
-  priceOld      Decimal?  @db.Decimal(10, 2)
-  discount      Int       @default(0)
-  stock         Int       @default(0)
-  unit          String    @default("ც")
-  badge         Badge?
-  rating        Decimal   @default(0) @db.Decimal(3, 2)
-  reviewCount   Int       @default(0)
-  images        String[]
-  imagePublicIds String[] // Cloudinary public IDs for deletion
-  isActive      Boolean   @default(true)
-  isFeatured    Boolean   @default(false)
-  weight        Decimal?  @db.Decimal(8, 3)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  category      Category?   @relation(fields: [categoryId], references: [id])
-  cartItems     CartItem[]
-  orderItems    OrderItem[]
+  id                    String           @id @default(uuid())
+  finaId                String?          @unique
+  sku                   String           @unique
+  brand                 String
+  nameKa                String
+  nameEn                String           @default("")
+  nameRu                String           @default("")
+  descriptionKa         String?
+  descriptionEn         String?
+  descriptionRu         String?
+  articleNumber         String?
+  compatibility         String?
+  categoryId            String?
+  autodocCategoryId     Int?     @map("autodoc_category_id")
+  price                 Decimal          @db.Decimal(10, 2)
+  priceOld              Decimal?         @db.Decimal(10, 2)
+  discount              Int              @default(0)
+  stock                 Int              @default(0)
+  unit                  String           @default("ც")
+  badge                 Badge?
+  rating                Decimal          @default(0) @db.Decimal(3, 2)
+  reviewCount           Int              @default(0)
+  images                String[]
+  imagePublicIds        String[]
+  isActive              Boolean          @default(true)
+  isFeatured            Boolean          @default(false)
+  weight                Decimal?         @db.Decimal(8, 3)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  alternativeSearchKeys String[]
+  normalizedSku         String?
+  oemCodes              String[]
+  reservedQty           Int              @default(0)
+  syncNote              String?
+  syncStatus            String           @default("OK")
+  syncedAt              DateTime?
+  b2bPrice              Decimal?         @db.Decimal(10, 2)
+  supplierId            String?
+  supplierPrice         Decimal?         @db.Decimal(10, 2)
+  cartItems             CartItem[]
+  orderItems            OrderItem[]
+  priceChangeLogs       PriceChangeLog[]
+  listings              ProductListing[]
+  reviews               ProductReview[]
+  vehicles              ProductVehicle[]
+  category              Category?        @relation(fields: [categoryId], references: [id])
+  wishlist              Wishlist[]
 
   @@map("products")
 }
 
-enum Badge {
-  SALE
-  NEW
-  TOP
-  HIT
-}
-
-// ── Vehicle compatibility ─────────────────────────────────────────────────
 model VehicleMake {
   id     String         @id @default(uuid())
   name   String         @unique
@@ -145,27 +144,25 @@ model VehicleMake {
 }
 
 model VehicleModel {
-  id       String      @id @default(uuid())
+  id       String           @id @default(uuid())
   makeId   String
   name     String
   yearFrom Int?
   yearTo   Int?
-
-  make     VehicleMake @relation(fields: [makeId], references: [id], onDelete: Cascade)
+  products ProductVehicle[]
+  make     VehicleMake      @relation(fields: [makeId], references: [id], onDelete: Cascade)
 
   @@unique([makeId, name])
   @@map("vehicle_models")
 }
 
-// ── Cart ───────────────────────────────────────────────────────────────────
 model Cart {
   id        String     @id @default(uuid())
   userId    String     @unique
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
-
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     CartItem[]
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("carts")
 }
@@ -176,7 +173,6 @@ model CartItem {
   productId String
   qty       Int      @default(1)
   createdAt DateTime @default(now())
-
   cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
   product   Product  @relation(fields: [productId], references: [id])
 
@@ -184,14 +180,13 @@ model CartItem {
   @@map("cart_items")
 }
 
-// ── Orders ─────────────────────────────────────────────────────────────────
 model Order {
   id              String        @id @default(uuid())
   orderNumber     String        @unique @default(cuid())
   userId          String
   addressId       String?
   deliveryZone    DeliveryZone  @default(OTHER)
-  deliveryFee     Decimal       @db.Decimal(10, 2) @default(0)
+  deliveryFee     Decimal       @default(0) @db.Decimal(10, 2)
   subtotal        Decimal       @db.Decimal(10, 2)
   total           Decimal       @db.Decimal(10, 2)
   status          OrderStatus   @default(PENDING)
@@ -206,13 +201,306 @@ model Order {
   lang            String        @default("ka")
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
-
-  user    User        @relation(fields: [userId], references: [id])
-  address Address?    @relation(fields: [addressId], references: [id])
-  items   OrderItem[]
-  payment Payment?
+  paymentUrl      String?
+  items           OrderItem[]
+  address         Address?      @relation(fields: [addressId], references: [id])
+  user            User          @relation(fields: [userId], references: [id])
+  payment         Payment?
 
   @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  productId String
+  nameKa    String
+  nameEn    String  @default("")
+  nameRu    String  @default("")
+  sku       String  @default("")
+  brand     String  @default("")
+  price     Decimal @db.Decimal(10, 2)
+  qty       Int
+  total     Decimal @db.Decimal(10, 2)
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model Payment {
+  id           String        @id @default(uuid())
+  orderId      String        @unique
+  provider     String
+  externalId   String?
+  amount       Decimal       @db.Decimal(10, 2)
+  currency     String        @default("GEL")
+  status       PaymentStatus @default(UNPAID)
+  redirectUrl  String?
+  callbackData Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  order        Order         @relation(fields: [orderId], references: [id])
+
+  @@map("payments")
+}
+
+model DeliveryZoneConfig {
+  zone          DeliveryZone @id
+  fee           Decimal      @default(0) @db.Decimal(10, 2)
+  freeFrom      Decimal      @default(150) @db.Decimal(10, 2)
+  enabled       Boolean      @default(true)
+  estimatedDays Int          @default(1)
+  label         String       @default("")
+
+  @@map("delivery_zone_configs")
+}
+
+model FinaSyncLog {
+  id           String   @id @default(uuid())
+  status       String
+  message      String?
+  itemsAdded   Int      @default(0)
+  itemsUpdated Int      @default(0)
+  itemsSynced  Int      @default(0)
+  duration     Int?
+  createdAt    DateTime @default(now())
+
+  @@map("fina_sync_logs")
+}
+
+model PasswordReset {
+  email     String   @id
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("password_resets")
+}
+
+model UserVehicle {
+  id           String   @id @default(uuid())
+  userId       String
+  make         String
+  model        String
+  year         Int
+  engine       String?
+  isMain       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  displacement String?
+  fuelType     String?
+  vehicleId    String?  @map("vehicle_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_vehicles")
+}
+
+model Wishlist {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  productId String
+  userId    String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("wishlists")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String
+  target    String?
+  oldValue  Json?
+  newValue  Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model SearchLog {
+  id          String   @id @default(uuid())
+  query       String
+  resultCount Int      @default(0)
+  makeId      String?
+  modelId     String?
+  year        Int?
+  userId      String?
+  createdAt   DateTime @default(now())
+
+  @@index([resultCount, createdAt])
+  @@map("search_logs")
+}
+
+model StockReservation {
+  id         String   @id @default(uuid())
+  productId  String
+  cartItemId String?
+  qty        Int
+  confirmed  Boolean  @default(false)
+  expiresAt  DateTime
+  userTier   String?
+  createdAt  DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("stock_reservations")
+}
+
+model PriceChangeLog {
+  id            String   @id @default(uuid())
+  productId     String
+  oldPrice      Decimal  @db.Decimal(10, 2)
+  newPrice      Decimal  @db.Decimal(10, 2)
+  changePercent Decimal  @db.Decimal(6, 2)
+  approved      Boolean  @default(false)
+  autoApproved  Boolean  @default(false)
+  approvedBy    String?
+  syncedAt      DateTime @default(now())
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([approved, syncedAt])
+  @@map("price_change_logs")
+}
+
+model FitmentCache {
+  id       String   @id @default(uuid())
+  makeId   String
+  modelId  String
+  engineId String?
+  yearFrom Int
+  yearTo   Int
+  oemCodes String[]
+  source   String   @default("exists.de")
+  syncedAt DateTime @default(now())
+
+  @@unique([makeId, modelId, yearFrom, yearTo])
+  @@index([makeId, modelId])
+  @@map("fitment_cache")
+}
+
+model Supplier {
+  id          String           @id @default(uuid())
+  userId      String           @unique
+  companyName String
+  contactName String
+  phone       String
+  address     String?
+  taxId       String?
+  bankAccount String?
+  commission  Float            @default(10.0)
+  status      SupplierStatus   @default(PENDING)
+  rating      Float            @default(0)
+  totalSales  Int              @default(0)
+  balance     Float            @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  listings    ProductListing[]
+  payouts     SupplierPayout[]
+  user        User             @relation(fields: [userId], references: [id])
+
+  @@map("suppliers")
+}
+
+model ProductListing {
+  id          String        @id @default(uuid())
+  supplierId  String
+  productId   String?
+  nameKa      String
+  nameEn      String?
+  sku         String
+  brand       String
+  price       Decimal       @db.Decimal(10, 2)
+  stock       Int           @default(0)
+  images      String[]
+  description String?
+  status      ListingStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  product     Product?      @relation(fields: [productId], references: [id])
+  supplier    Supplier      @relation(fields: [supplierId], references: [id])
+
+  @@map("product_listings")
+}
+
+model SupplierPayout {
+  id         String       @id @default(uuid())
+  supplierId String
+  amount     Float
+  status     PayoutStatus @default(PENDING)
+  note       String?
+  createdAt  DateTime     @default(now())
+  supplier   Supplier     @relation(fields: [supplierId], references: [id])
+
+  @@map("supplier_payouts")
+}
+
+model ProductReview {
+  id        String   @id @default(uuid())
+  productId String
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([productId, userId])
+  @@map("product_reviews")
+}
+
+model ProductVehicle {
+  id             String       @id @default(dbgenerated("(gen_random_uuid())::text"))
+  productId      String
+  vehicleModelId String
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  vehicleModel   VehicleModel @relation(fields: [vehicleModelId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([productId, vehicleModelId], map: "product_vehicles_productid_vehiclemodelid_key")
+  @@map("product_vehicles")
+}
+
+model SearchAnalytics {
+  id            String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  query         String
+  brand         String?
+  model         String?
+  year          String?
+  part_ka       String?
+  results_count Int?      @default(0)
+  clicked       Boolean?  @default(false)
+  cart_added    Boolean?  @default(false)
+  purchased     Boolean?  @default(false)
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([created_at], map: "idx_search_analytics_created")
+  @@index([results_count], map: "idx_search_analytics_results")
+  @@map("search_analytics")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum DeliveryZone {
+  TBILISI
+  RUSTAVI
+  MTSKHETA
+  GORI
+  KUTAISI
+  OTHER
+}
+
+enum Badge {
+  SALE
+  NEW
+  TOP
+  HIT
 }
 
 enum OrderStatus {
@@ -237,65 +525,228 @@ enum PaymentStatus {
   REFUNDED
 }
 
-model OrderItem {
-  id        String  @id @default(uuid())
-  orderId   String
-  productId String
-  nameKa    String
-  nameEn    String  @default("")
-  nameRu    String  @default("")
-  sku       String  @default("")
-  brand     String  @default("")
-  price     Decimal @db.Decimal(10, 2)
-  qty       Int
-  total     Decimal @db.Decimal(10, 2)
-
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product @relation(fields: [productId], references: [id])
-
-  @@map("order_items")
+enum SupplierStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
 }
 
-model Payment {
-  id           String        @id @default(uuid())
-  orderId      String        @unique
-  provider     String
-  externalId   String?
-  amount       Decimal       @db.Decimal(10, 2)
-  currency     String        @default("GEL")
-  status       PaymentStatus @default(UNPAID)
-  redirectUrl  String?
-  callbackData Json?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  order        Order         @relation(fields: [orderId], references: [id])
-
-  @@map("payments")
+enum ListingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ACTIVE
+  INACTIVE
 }
 
-// ── Delivery zones config ─────────────────────────────────────────────────
-model DeliveryZoneConfig {
-  zone         DeliveryZone @id
-  fee          Decimal      @db.Decimal(10, 2) @default(0)
-  freeFrom     Decimal      @db.Decimal(10, 2) @default(150)
-  enabled      Boolean      @default(true)
-  estimatedDays Int         @default(1)
-  label        String       @default("")
-
-  @@map("delivery_zone_configs")
+enum PayoutStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
 }
 
-// ── FINA Sync ──────────────────────────────────────────────────────────────
-model FinaSyncLog {
+model AutodocVehicleCache {
+  id             Int      @id @default(autoincrement())
+  make           String
+  model          String
+  year           Int
+  vehicleId      Int      @map("vehicle_id")
+  modelId        Int      @map("model_id")
+  manufacturerId Int      @map("manufacturer_id")
+  engineName     String?  @map("engine_name")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([make, model, year])
+  @@map("autodoc_vehicle_cache")
+}
+
+model ReferenceOem {
+  id          Int      @id @default(autoincrement())
+  make        String
+  model       String
+  generation  String
+  partType    String   @map("part_type")
+  brand       String
+  code        String
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([make, model, generation, partType])
+  @@map("reference_oem")
+}
+
+model EngineMapping {
+  id           Int      @id @default(autoincrement())
+  engineCode   String   @map("engine_code")
+  make         String
+  model        String
+  generation   String
+  yearFrom     Int      @map("year_from")
+  yearTo       Int?     @map("year_to")
+  displacement String?
+  fuelType     String?  @map("fuel_type")
+  powerKw      Int?     @map("power_kw")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([engineCode, make, model])
+  @@index([engineCode])
+  @@map("engine_mapping")
+}
+
+model ServiceInterval {
+  id         Int      @id @default(autoincrement())
+  make       String
+  model      String
+  generation String?
+  kmFrom     Int      @map("km_from")
+  kmTo       Int?     @map("km_to")
+  partType   String   @map("part_type")
+  priority   String   @default("recommended")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([make, model, kmFrom])
+  @@map("service_interval")
+}
+
+model Lead {
+  id        Int      @id @default(autoincrement())
+  phone     String
+  oemCode   String?  @map("oem_code")
+  partName  String?  @map("part_name")
+  make      String?
+  model     String?
+  year      String?
+  message   String?
+  status    String   @default("new")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("leads")
+}
+
+model PartsIntelligence {
+  id         Int      @id @default(autoincrement())
+  make       String
+  model      String
+  generation String?
+  engineCode String?  @map("engine_code")
+  partType   String   @map("part_type")
+  frequency  Int      @default(1)
+  priority   String   @default("common")
+  reason     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([make, model, engineCode])
+  @@map("parts_intelligence")
+}
+
+model PartsRelation {
+  id          Int     @id @default(autoincrement())
+  partType    String  @map("part_type")
+  relatedPart String  @map("related_part")
+  relation    String  @default("recommended")
+  reason      String?
+
+  @@index([partType])
+  @@map("parts_relation")
+}
+
+model VehicleMaster {
+  id         Int      @id @default(autoincrement())
+  vehicleId  Int      @unique @map("vehicle_id")
+  make       String
+  model      String
+  generation String
+  yearFrom   Int      @map("year_from")
+  yearTo     Int?     @map("year_to")
+  aliases    String[]
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([make, model])
+  @@map("vehicle_master")
+}
+
+model VehicleCache {
+  vehicleId    String       @id @map("vehicle_id")
+  vin          String?      @unique
+  manufacturer String
+  model        String
+  year         String
+  engine       String?
+  fuel         String?
+  updatedAt    DateTime     @default(now()) @map("updated_at")
+  oems         VehicleOem[]
+
+  @@map("vehicle_cache")
+}
+
+model VehicleOem {
+  id        Int          @id @default(autoincrement())
+  vehicleId String       @map("vehicle_id")
+  oemCode   String       @map("oem_code")
+  category  String
+  vehicle   VehicleCache @relation(fields: [vehicleId], references: [vehicleId], onDelete: Cascade)
+
+  @@unique([vehicleId, oemCode])
+  @@index([oemCode])
+  @@map("vehicle_oem")
+}
+
+model CrossReference {
+  id            Int    @id @default(autoincrement())
+  oemCode       String @map("oem_code")
+  articleNumber String @map("article_number")
+  brand         String
+
+  @@unique([oemCode, articleNumber, brand])
+  @@index([oemCode])
+  @@index([articleNumber])
+  @@map("cross_reference")
+}
+
+model ProductOemMap {
+  id            Int     @id @default(autoincrement())
+  productId     String  @map("product_id")
+  oemCode       String  @map("oem_code")
+  articleNumber String? @map("article_number")
+  brand         String?
+
+  @@unique([productId, oemCode])
+  @@index([oemCode])
+  @@index([articleNumber])
+  @@map("product_oem_map")
+}
+
+model ProductImage {
+  id            Int    @id @default(autoincrement())
+  articleNumber String @map("article_number")
+  imageUrl      String @map("image_url")
+  sortOrder     Int    @default(0) @map("sort_order")
+
+  @@index([articleNumber])
+  @@map("product_images")
+}
+
+model MaintenanceReminder {
   id           String   @id @default(uuid())
-  status       String
-  message      String?
-  itemsAdded   Int      @default(0)
-  itemsUpdated Int      @default(0)
-  itemsSynced  Int      @default(0)
-  duration     Int?
+  userId       String
+  vehicleId    String?  @map("vehicle_id")
+  make         String
+  model        String
+  year         Int
+  serviceType  String
+  lastDone     DateTime
+  intervalKm   Int?
+  intervalDays Int?
+  nextDue      DateTime
+  mileage      Int?
+  notes        String?
+  notified     Boolean  @default(false)
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  @@map("fina_sync_logs")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("maintenance_reminders")
 }

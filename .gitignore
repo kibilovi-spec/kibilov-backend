@@ -1,1 +1,7 @@
-/node_modules
+.env
+.env.local
+.env.production
+node_modules/
+uploads/
+*.log
+.next/

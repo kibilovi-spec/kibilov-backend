@@ -50,6 +50,15 @@ router.get('/', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
+// Dynamic reservation TTL by B2B tier
+function getReservationMinutes(user) {
+  if (!user || !user.b2bTier) return 10; // Retail/Guest
+  if (user.b2bTier === 'FOUNDING') return 45;
+  if (user.b2bTier === 'HIGH_VALUE') return 30;
+  if (user.b2bTier === 'STANDARD') return 20;
+  return 10;
+}
+
 // POST /api/cart  (add item)
 router.post('/', async (req, res) => {
   try {
@@ -69,6 +78,14 @@ router.post('/', async (req, res) => {
       await prisma.cartItem.update({ where: { id: existing.id }, data: { qty: newQty } });
     } else {
       await prisma.cartItem.create({ data: { cartId: cart.id, productId, qty } });
+      // Analytics: cart_added
+      try {
+        // analyticsId passed from frontend
+        const analyticsId = req.body.analyticsId || null;
+        if (analyticsId) {
+          await prisma.$executeRaw`UPDATE search_analytics SET cart_added=true WHERE id=${analyticsId}`;
+        }
+      } catch(e) {}
     }
 
     const updated = await getOrCreateCart(req.user.id);
