@@ -111,7 +111,6 @@ app.use('/api/garages', require('./routes/garages'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/admin', require('./routes/admin2'));
 app.use('/api/vin',   require('./routes/vin'));
-app.use('/api/supplier', require('./routes/supplier'));
 
 // ── Health ─────────────────────────────────────────────────────────────────────
 app.get('/api/health', async (_, res) => {
@@ -214,7 +213,6 @@ app.use((err, req, res, next) => {
   });
 });
 
+app.use('/api/payout', require('./routes/payout'));
 module.exports = app;
 
-app.use('/api/supplier', require('./routes/supplier'));
-app.use('/api/payout', require('./routes/payout'));
