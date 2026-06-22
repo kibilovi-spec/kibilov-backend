@@ -560,6 +560,37 @@ router.delete('/import-batches/:id', requireAdmin, async (req, res) => {
   } catch(e) { res.status(500).json({error: e.message}); }
 });
 
+
+// GET /api/admin/data-quality — AI Data Quality Dashboard
+router.get('/data-quality', requireAdmin, async (req, res) => {
+  try {
+    const [stats] = await prisma.$queryRaw`
+      SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE images IS NULL OR images = '{}') as no_image,
+        COUNT(*) FILTER (WHERE autodoc_category_id IS NULL) as no_category,
+        COUNT(*) FILTER (WHERE "oemCodes" IS NULL OR "oemCodes" = '{}') as no_oem,
+        COUNT(*) FILTER (WHERE stock = 0) as out_of_stock,
+        COUNT(*) FILTER (WHERE "isActive" = false) as inactive
+      FROM products
+    `;
+    res.json({
+      success: true,
+      data: {
+        total: Number(stats.total),
+        noImage: Number(stats.no_image),
+        noCategory: Number(stats.no_category),
+        noOem: Number(stats.no_oem),
+        outOfStock: Number(stats.out_of_stock),
+        inactive: Number(stats.inactive),
+        imagePercent: Math.round((1 - Number(stats.no_image) / Number(stats.total)) * 100),
+        categoryPercent: Math.round((1 - Number(stats.no_category) / Number(stats.total)) * 100),
+        oemPercent: Math.round((1 - Number(stats.no_oem) / Number(stats.total)) * 100),
+      }
+    });
+  } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 module.exports = router;
 
 // PATCH /api/admin/products/:id/images

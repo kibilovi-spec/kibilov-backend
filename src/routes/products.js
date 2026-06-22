@@ -298,10 +298,11 @@ router.get('/:id', optionalAuth, async (req, res) => {
     include: { category:true },
   });
 
+  if (!p) return res.status(404).json({ success:false, message:"product not found" });
 
   // parallel queries - no N+1
   const [oemRelated, catRelated] = await Promise.all([
-    p.oemCodes && p.oemCodes.length > 0
+    p?.oemCodes?.length > 0
       ? prisma.product.findMany({
           where: { isActive:true, NOT:{ id: p.id }, oemCodes: { hasSome: p.oemCodes } },
           take: 4, include:{ category:true },
