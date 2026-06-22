@@ -161,24 +161,16 @@ router.patch('/:id/status', requireAdmin, async (req, res) => {
   if (!valid.includes(req.body.status))
     return res.status(422).json({ success: false, message: `სტატუსი: ${valid.join(', ')}` });
 
-  const order = await prisma.order.update({
-    where: { id: req.params.id },
-    data: { status: req.body.status, adminNotes: req.body.adminNotes },
-  });
-
-  if (req.body.status === 'DELIVERED') {
-    try {
-      const fullOrder = await prisma.order.findUnique({
+  // TRANSACTION: order status + supplier balance atomically
+  const order = await prisma.$transaction(async (tx) => {
+    const updated = await tx.order.update({
+      where: { id: req.params.id },
+      data: { status: req.body.status, adminNotes: req.body.adminNotes },
+    });
+    if (req.body.status === 'DELIVERED') {
+      const fullOrder = await tx.order.findUnique({
         where: { id: req.params.id },
-        include: {
-          items: {
-            include: {
-              product: {
-                include: { supplier: true }
-              }
-            }
-          }
-        }
+        include: { items: { include: { product: { include: { supplier: true } } } } }
       });
       const earnings = {};
       for (const item of fullOrder.items) {
@@ -190,14 +182,14 @@ router.patch('/:id/status', requireAdmin, async (req, res) => {
         earnings[sup.id] += earning;
       }
       for (const [supplierId, amount] of Object.entries(earnings)) {
-        await prisma.supplier.update({
+        await tx.supplier.update({
           where: { id: supplierId },
           data: { balance: { increment: amount } }
         });
       }
-    } catch (e) {
-      console.error('Supplier balance update error:', e.message);
     }
+    return updated;
+  });
   try {
     const { sendOrderStatusUpdate } = require("../services/email");
     const orderWithUser = await prisma.order.findUnique({ where: { id: req.params.id }, include: { user: true } });
@@ -205,7 +197,6 @@ router.patch('/:id/status', requireAdmin, async (req, res) => {
       await sendOrderStatusUpdate(orderWithUser, orderWithUser.user.email, req.body.status);
     }
   } catch(e) { console.error("Status email error:", e.message); }
-  }
 
   res.json({ success: true, data: order });
 });
