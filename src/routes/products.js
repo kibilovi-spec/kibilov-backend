@@ -1,4 +1,5 @@
 'use strict';
+const cache = require('../services/cache');
 const router = require('express').Router();
 
 function calcB2BPrice(price) {
@@ -361,6 +362,8 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
     if (isActive !== undefined) updateData.isActive = isActive;
     if (images !== undefined) updateData.images = images;
     const p = await prisma.product.update({ where:{ id:req.params.id }, data: updateData });
+    await cache.del(`product:${req.params.id}`);
+    await cache.flush('products:*');
     res.json({ success:true, data: p });
   } catch(e) { res.status(400).json({ success:false, message: e.message }); }
 });
@@ -368,6 +371,8 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
 // DELETE /api/products/:id (admin)
 router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
   await prisma.product.update({ where:{ id:req.params.id }, data:{ isActive:false } });
+  await cache.del(`product:${req.params.id}`);
+  await cache.flush('products:*');
   res.json({ success:true, message:'პროდუქტი წაიშალა' });
 });
 
