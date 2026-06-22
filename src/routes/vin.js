@@ -1,5 +1,7 @@
 'use strict';
 const express = require('express');
+const Anthropic = require('@anthropic-ai/sdk');
+const _anthropicClient = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
 const router  = express.Router();
 
 // VIN Confidence Score
@@ -194,16 +196,16 @@ router.post('/ocr', async (req, res) => {
       try {
         const buffer = Buffer.concat(chunks);
         if (!buffer.length) return res.status(400).json({ error: 'ფაილი ცარიელია' });
-        const apiKey = process.env.ANTHROPIC_API_KEY;
-        if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY არ არის' });
+        if (!_anthropicClient) return res.status(500).json({ error: 'ANTHROPIC_API_KEY არ არის' });
         let mediaType = 'image/jpeg';
         if (buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50) mediaType = 'image/png';
         else if (buffer.length >= 3 && buffer[0] === 0x47 && buffer[1] === 0x49) mediaType = 'image/gif';
         else if (buffer.length >= 12 && buffer.toString('ascii', 8, 12) === 'WEBP') mediaType = 'image/webp';
         const base64 = buffer.toString('base64');
-        const Anthropic = require('@anthropic-ai/sdk');
-        const client = new Anthropic({ apiKey });
-        const response = await client.messages.create({
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('OCR timeout — სცადეთ თავიდან')), 15000)
+        );
+        const response = await Promise.race([_anthropicClient.messages.create({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 300,
           messages: [{
@@ -213,7 +215,7 @@ router.post('/ocr', async (req, res) => {
               { type: 'text', text: 'Extract the 17-character VIN code from this image. VIN contains only A-Z (no I,O,Q) and 0-9. Look on dashboard, door jamb, registration document, or anywhere VIN is visible. Return ONLY the 17-character VIN, nothing else. If no VIN is visible, return exactly: NOT_FOUND' }
             ]
           }]
-        });
+        }), timeoutPromise]);
         const rawText = (response.content[0].text || '').trim().toUpperCase();
         const cleaned = rawText.replace(/[^A-HJ-NPR-Z0-9]/g, '');
         const vinMatch = cleaned.match(/[A-HJ-NPR-Z0-9]{17}/);
