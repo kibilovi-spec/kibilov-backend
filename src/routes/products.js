@@ -289,28 +289,38 @@ router.get('/stats', async (req, res) => {
 
 router.get('/:id', optionalAuth, async (req, res) => {
   const lang = req.query.lang || 'ka';
+  const cacheKey = `product:${req.params.id}:${lang}`;
+  const cached = await cache.get(cacheKey);
+  if (cached) return res.json(cached);
+
   const p = await prisma.product.findFirst({
     where: { AND:[{ isActive:true }, { OR:[{ id:req.params.id },{ sku:req.params.id }] }] },
     include: { category:true },
   });
-  if (!p) return res.status(404).json({ success:false, message:'პროდუქტი ვერ მოიძებნა' });
 
-  let related = [];
-  if (p.oemCodes && p.oemCodes.length > 0) {
-    related = await prisma.product.findMany({
-      where: { isActive:true, NOT:{ id: p.id }, oemCodes: { hasSome: p.oemCodes } },
+
+  // parallel queries - no N+1
+  const [oemRelated, catRelated] = await Promise.all([
+    p.oemCodes && p.oemCodes.length > 0
+      ? prisma.product.findMany({
+          where: { isActive:true, NOT:{ id: p.id }, oemCodes: { hasSome: p.oemCodes } },
+          take: 4, include:{ category:true },
+        })
+      : Promise.resolve([]),
+    prisma.product.findMany({
+      where: { isActive:true, autodocCategoryId: p.autodocCategoryId, NOT:{ id: p.id } },
       take: 4, include:{ category:true },
-    });
-  }
-  if (related.length < 4) {
-    const oemIds = related.map(r => r.id);
-    const extra = await prisma.product.findMany({
-      where: { isActive:true, autodocCategoryId: p.autodocCategoryId, NOT:{ id: { in: [p.id, ...oemIds] } } },
-      take: 4 - related.length, include:{ category:true },
-    });
-    related = [...related, ...extra];
-  }
-  res.json({ success:true, data: fmtProduct(p, lang), related: related.map(r => fmtProduct(r, lang)), oemCodes: p.oemCodes });
+    }),
+  ]);
+  const oemIds = new Set(oemRelated.map(r => r.id));
+  const related = [
+    ...oemRelated,
+    ...catRelated.filter(r => !oemIds.has(r.id)),
+  ].slice(0, 4);
+
+  const result = { success:true, data: fmtProduct(p, lang), related: related.map(r => fmtProduct(r, lang)), oemCodes: p.oemCodes };
+  await cache.set(cacheKey, result, 1800);
+  res.json(result);
 });
 
 // POST /api/products (admin)
