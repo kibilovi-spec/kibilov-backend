@@ -30,9 +30,9 @@ router.get('/search', async (req, res) => {
 
 router.post('/click', async (req, res) => {
   try {
-    const { analyticsId } = req.body;
+    const { analyticsId, productId, position } = req.body;
     if (analyticsId) {
-      await prisma.$executeRaw`UPDATE search_analytics SET clicked=true WHERE id=${analyticsId}`;
+      await prisma.$executeRaw`UPDATE search_analytics SET clicked=true, clicked_product_id=${productId||null}, position_clicked=${position||null} WHERE id=${analyticsId}`;
     }
     res.json({ success: true });
   } catch(e) {
@@ -43,9 +43,9 @@ router.post('/click', async (req, res) => {
 
 router.post('/cart', async (req, res) => {
   try {
-    const { analyticsId } = req.body;
+    const { analyticsId, productId } = req.body;
     if (analyticsId) {
-      await prisma.$executeRaw`UPDATE search_analytics SET cart_added=true WHERE id=${analyticsId}`;
+      await prisma.$executeRaw`UPDATE search_analytics SET cart_added=true, clicked_product_id=COALESCE(clicked_product_id,${productId||null}) WHERE id=${analyticsId}`;
     }
     res.json({ success: true });
   } catch(e) {
