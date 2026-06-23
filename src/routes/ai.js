@@ -505,6 +505,21 @@ router.post('/chat', async (req, res) => {
     const prisma = new PrismaClient();
 
     const searchTerms = parsed.search_terms || [];
+
+    // vehicleResolver — DB-driven generation context enrichment
+    try {
+      const { resolveVehicleContext } = require('../services/vehicleResolver');
+      const genCtx = await resolveVehicleContext(message);
+      if (genCtx && !parsed._generation) {
+        parsed._generation = genCtx.generation;
+        parsed._generationMake = genCtx.make;
+        parsed._generationModel = genCtx.model;
+        parsed._yearFrom = genCtx.year_from;
+        parsed._yearTo = genCtx.year_to;
+        if (!parsed.brand && genCtx.make) parsed.brand = genCtx.make;
+        if (!parsed.model && genCtx.model) parsed.model = genCtx.model;
+      }
+    } catch(e) {}
     
     // generation matching — წელი + მოდელი → generation aliases
     // OEM code detection — 6-15 char alphanumeric
