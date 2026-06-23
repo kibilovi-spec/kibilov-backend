@@ -3,6 +3,7 @@ const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const autodoc = require('../services/autodoc');
 const cache = require('../services/cache');
+const { resolveVehicleContext } = require('../services/vehicleResolver');
 const { rankProducts, filterAvailable } = require('../services/rankingEngine');
 const { selfHeal } = require('../services/selfHealingSearch');
 const prisma = new PrismaClient();
@@ -251,21 +252,33 @@ const VEHICLE_ALIASES = {
   'w210':     [1995,2003], 'w203':     [2000,2007],
 };
 
-function filterVehiclesByAlias(vehicles, query) {
+async function filterVehiclesByAlias(vehicles, query) {
   if (!vehicles || !vehicles.length) return vehicles;
   const q = (query||'').toLowerCase();
-  let range = null;
-  for (const [key, yrs] of Object.entries(VEHICLE_ALIASES)) {
-    if (q.includes(key)) { range = yrs; break; }
+  let yF = null, yT = null;
+
+  // 1. DB-driven resolution (vehicleResolver)
+  try {
+    const genCtx = await resolveVehicleContext(q);
+    if (genCtx && genCtx.year_from) {
+      yF = genCtx.year_from;
+      yT = genCtx.year_to || 9999;
+    }
+  } catch(e) {}
+
+  // 2. fallback to hardcoded VEHICLE_ALIASES
+  if (!yF) {
+    for (const [key, yrs] of Object.entries(VEHICLE_ALIASES)) {
+      if (q.includes(key)) { [yF, yT] = yrs; break; }
+    }
   }
-  if (!range) return vehicles;
-  const [yF, yT] = range;
+
+  if (!yF) return vehicles;
   const filtered = vehicles.filter(v => {
-    const vF = parseInt(v.yearFrom || v.year_from || 0);
-    const vT = parseInt(v.yearTo   || v.year_to   || 9999);
-    return vF <= yT && vT >= yF;
+    const vFrom = parseInt(v.yearFrom || v.year_from || 0);
+    const vTo = parseInt(v.yearTo   || v.year_to   || 9999);
+    return vFrom <= yT && vTo >= yF;
   });
-  console.log('[year-filter]', query, vehicles.length, '->', filtered.length, 'range:', yF, yT);
   return filtered.length > 0 ? filtered : vehicles;
 }
 
