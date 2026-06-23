@@ -33,8 +33,6 @@ const CATEGORY_WEIGHTS = {
 function getCategoryWeights(categoryId) {
   return CATEGORY_WEIGHTS[categoryId] || { stockWeight: 1.0, brandWeight: 1.0, priceWeight: 1.0, oemWeight: 1.0 };
 }
-
- — improved per senior architect review
 const PREMIUM_BRANDS = ['BOSCH','BREMBO','ATE','TRW','MANN','MAHLE','SACHS','FEBI','LUK','SKF','FAG','INA'];
 const GOOD_BRANDS    = ['DELPHI','VALEO','DENSO','NGK','GATES','DAYCO','MEYLE','FEBEST','TOPRAN'];
 const STOPWORDS      = new Set(['for','and','the','of','a','an','to','in','on','at','by','with','is','or']);
