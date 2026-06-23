@@ -387,5 +387,26 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
   res.json({ success:true, message:'პროდუქტი წაიშალა' });
 });
 
+
+// GET /api/products/:id/fitment?vehicleId=&make=&model=&year=&generation=
+router.get('/:id/fitment', optionalAuth, async (req, res) => {
+  try {
+    const { getFitmentScore } = require('../services/fitmentScore');
+    const p = await prisma.product.findFirst({
+      where: { AND:[{ isActive:true }, { OR:[{ id:req.params.id },{ sku:req.params.id }] }] },
+      select: { id:true, sku:true, nameKa:true, oemCodes:true, autodocCategoryId:true }
+    });
+    if (!p) return res.status(404).json({ success:false });
+    const vehicleContext = {
+      vehicleId: req.query.vehicleId || null,
+      make: req.query.make || null,
+      model: req.query.model || null,
+      year: req.query.year || null,
+      generation: req.query.generation || null,
+    };
+    const result = await getFitmentScore(p, vehicleContext);
+    res.json({ success:true, fitment: result });
+  } catch(e) { res.status(500).json({ success:false, message:e.message }); }
+});
 module.exports = router;
 
