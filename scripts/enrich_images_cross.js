@@ -48,7 +48,7 @@ async function getImageFromCrossRefs(articleId) {
     AND sku NOT LIKE 'BB%' AND sku NOT LIKE 'SAK%'
     AND sku NOT LIKE 'KFC%' AND sku NOT LIKE 'SB%'
     AND sku NOT LIKE 'LF%' AND sku NOT LIKE 'MF%'
-    AND sku NOT LIKE 'WO%' AND sku NOT LIKE 'GB%'
+    AND sku NOT LIKE 'WO%' AND sku NOT LIKE 'GB-%'
     ORDER BY sku
     LIMIT 200
   `;
