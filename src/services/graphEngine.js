@@ -10,13 +10,16 @@ async function getOEMChain(startOEM, maxDepth = 3) {
 
   const visited = new Set();
   const queue = [{ code: startOEM, depth: 0 }];
-  const result = [];
+  const result = []; // {code, depth}
+  const scored = new Map(); // code → hop score
 
   while (queue.length > 0) {
     const { code, depth } = queue.shift();
     if (visited.has(code) || depth > maxDepth) continue;
     visited.add(code);
     result.push(code);
+    const hopScore = depth === 0 ? 100 : depth === 1 ? 80 : depth === 2 ? 60 : 40;
+    scored.set(code, hopScore);
 
     // გვერდითი კავშირები
     const edges = await prisma.$queryRaw`
@@ -30,8 +33,9 @@ async function getOEMChain(startOEM, maxDepth = 3) {
     }
   }
 
-  await cache.set(cacheKey, result, 86400); // 24h cache
-  return result;
+  const out = { codes: result, scored: Object.fromEntries(scored) };
+  await cache.set(cacheKey, out, 86400);
+  return out;
 }
 
 // Vehicle → Compatible OEM codes
@@ -52,7 +56,8 @@ async function getVehicleOEMs(vehicleId, categoryId = null) {
 // OEM → Products (graph-based)
 async function getProductsByOEMGraph(oemCode) {
   // 1. OEM chain-ი BFS-ით
-  const chain = await getOEMChain(oemCode);
+  const _chainResult = await getOEMChain(oemCode);
+    const chain = _chainResult.codes || _chainResult;
   
   // 2. product_oem_link-დან
   const links = await prisma.$queryRaw`
@@ -85,7 +90,8 @@ async function graphSearch(vehicleId, categoryId, partQuery) {
   // 2. ყოველ OEM-ზე graph traversal
   const allProductIds = new Set();
   for (const oem of vehicleOEMs.slice(0, 20)) {
-    const chain = await getOEMChain(oem);
+    const _chainResult = await getOEMChain(oem);
+    const chain = _chainResult.codes || _chainResult;
     const links = await prisma.$queryRaw`
       SELECT product_id FROM product_oem_link WHERE oem_code = ANY(${chain})
     `;
