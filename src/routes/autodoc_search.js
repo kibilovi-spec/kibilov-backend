@@ -462,7 +462,7 @@ router.post('/search', async (req, res) => {
           if (oems) await cache.set(_oemKey, oems, 86400 * 30);
         }
         oemCodes = (oems?.articles || [])
-          .flatMap(a => a.oemNo?.map(o => o.oemDisplayNo.replace(/[\s\-\.]/g, '').toUpperCase()) || [])
+          .flatMap(a => a.oemNo?.map(o => o.oemDisplayNo.replace(/[\s\-\._\/\(\)\[\]]/g, '').toUpperCase()) || [])
           .filter((v, i, arr) => arr.indexOf(v) === i);
 
         for (const code of oemCodes) {
@@ -490,7 +490,7 @@ router.post('/search', async (req, res) => {
         if (r.status === 429) { console.log('[artlookup] 429 rate limit'); break; }
         const d = await r.json();
         for (const a of (d?.articles || [])) {
-          if (a.articleNo) allSearchCodes.add(a.articleNo.replace(/[\s\-.]/g,'').toUpperCase());
+          if (a.articleNo) allSearchCodes.add(a.articleNo.replace(/[\s\-\._\/\(\)\[\]]/g,'').toUpperCase());
         }
         await _sleep(350);
       } catch(e) {}
