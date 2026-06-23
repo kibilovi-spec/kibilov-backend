@@ -8,6 +8,15 @@
  */
 
 const RULES = [
+  // === SKU-BASED RULES (highest priority) ===
+  { skuMatch: /^LF\s/i, cat: 100260, name: 'Air Filter (LF)' },
+  { skuMatch: /^MF\s/i, cat: 100263, name: 'Cabin Filter (MF)' },
+  { skuMatch: /^(KFC|SAK)\s/i, cat: 100263, name: 'Cabin Filter (KFC/SAK)' },
+  { skuMatch: /^(WB|DB-)\s?/i, cat: 100133, name: 'Wiper Blade' },
+  { skuMatch: /^W-7/i, cat: 999999, name: 'Chemical (W-7)' },
+  { skuMatch: /^GDB/i, cat: 100030, name: 'Brake Pad (GDB)' },
+  { skuMatch: /^BB\s/i, cat: 100030, name: 'Brake Pad (BB)' },
+  
   // === FILTERS ===
   { match: /ჰაერის ფილტ|air.?filter/i, cat: 100260, name: 'Air Filter' },
   { match: /ზეთის ფილტ|oil.?filter/i, cat: 100259, name: 'Oil Filter' },
@@ -48,7 +57,7 @@ function classifyProduct(product) {
   ].join(' ');
 
   for (const rule of RULES) {
-    const nameMatch = rule.match.test(text);
+    const nameMatch = rule.match ? rule.match.test(text) : false;
     const skuMatch = rule.skuMatch ? rule.skuMatch.test(product.sku || '') : false;
     if (nameMatch || skuMatch) {
       return { category: rule.cat, reason: rule.name };
