@@ -561,6 +561,61 @@ router.delete('/import-batches/:id', requireAdmin, async (req, res) => {
 });
 
 
+
+// GET /api/admin/search-stats — real search_analytics data
+router.get('/search-stats', async (req, res) => {
+  try {
+    const [summary] = await prisma.$queryRaw`
+      SELECT
+        COUNT(*)::int as total,
+        COUNT(*) FILTER (WHERE results_count = 0)::int as zero_results,
+        COUNT(*) FILTER (WHERE clicked = true)::int as clicked,
+        COUNT(*) FILTER (WHERE cart_added = true)::int as cart_added,
+        COUNT(*) FILTER (WHERE purchased = true)::int as purchased
+      FROM search_analytics
+    `;
+    const topQueries = await prisma.$queryRaw`
+      SELECT query, COUNT(*)::int as cnt, 
+        AVG(results_count)::int as avg_results,
+        SUM(CASE WHEN results_count=0 THEN 1 ELSE 0 END)::int as zero_cnt
+      FROM search_analytics
+      GROUP BY query ORDER BY cnt DESC LIMIT 20
+    `;
+    const zeroQueries = await prisma.$queryRaw`
+      SELECT query, COUNT(*)::int as cnt
+      FROM search_analytics WHERE results_count = 0
+      GROUP BY query ORDER BY cnt DESC LIMIT 20
+    `;
+    const byType = await prisma.$queryRaw`
+      SELECT search_type, COUNT(*)::int as cnt
+      FROM search_analytics WHERE search_type IS NOT NULL
+      GROUP BY search_type ORDER BY cnt DESC
+    `;
+    const daily = await prisma.$queryRaw`
+      SELECT DATE(created_at) as date,
+        COUNT(*)::int as searches,
+        COUNT(*) FILTER (WHERE results_count=0)::int as zero
+      FROM search_analytics
+      WHERE created_at > NOW() - INTERVAL '14 days'
+      GROUP BY DATE(created_at) ORDER BY date DESC
+    `;
+    const t = summary.total || 1;
+    res.json({
+      summary: {
+        total: summary.total,
+        zeroResults: summary.zero_results,
+        zeroRate: ((summary.zero_results/t)*100).toFixed(1)+'%',
+        ctr: ((summary.clicked/t)*100).toFixed(1)+'%',
+        cartRate: ((summary.cart_added/t)*100).toFixed(1)+'%',
+        purchaseRate: ((summary.purchased/t)*100).toFixed(1)+'%',
+      },
+      topQueries,
+      zeroQueries,
+      byType,
+      daily,
+    });
+  } catch(e) { res.status(500).json({ success:false, message:e.message }); }
+});
 // GET /api/admin/data-quality — AI Data Quality Dashboard
 router.get('/data-quality', requireAdmin, async (req, res) => {
   try {
