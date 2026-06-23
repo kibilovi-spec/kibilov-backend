@@ -1,4 +1,5 @@
 'use strict';
+const { isLocalBrand } = require('./localBrandRules');
 // Ranking Engine v3
 
 // Category-aware ranking weights
@@ -63,7 +64,8 @@ function scoreProduct(product, context = {}) {
   }
   const oc = product.oemCodes?.length||0;
   if (oc > 5) score += 10; else if (oc > 2) score += 7; else if (oc > 0) score += 4;
-  if (product.images?.length > 0) score += 5; else if (product.imageUrl) score += 2;
+  const localBrand = isLocalBrand(product.sku);
+  if (product.images?.length > 0) score += localBrand ? 3 : 5; else if (product.imageUrl) score += 2;
   if (context.searchQuery) {
     const words = context.searchQuery.toLowerCase().split(/\s+/).filter(w=>w.length>2&&!STOPWORDS.has(w));
     const name = (product.nameKa||product.nameEn||'').toLowerCase();
