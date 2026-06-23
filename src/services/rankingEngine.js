@@ -1,5 +1,40 @@
 'use strict';
-// Ranking Engine v3 — improved per senior architect review
+// Ranking Engine v3
+
+// Category-aware ranking weights
+// სხვადასხვა კატეგორიაში ranking პრიორიტეტები განსხვავდება
+const CATEGORY_WEIGHTS = {
+  100030: { // Brake Pad — safety critical, brand + OEM ყველაზე მნიშვნელოვანია
+    stockWeight: 1.0, brandWeight: 1.5, priceWeight: 0.8, oemWeight: 1.5
+  },
+  100031: { // Brake Lining/Shoe
+    stockWeight: 1.0, brandWeight: 1.5, priceWeight: 0.8, oemWeight: 1.5
+  },
+  100032: { // Brake Disc — safety critical
+    stockWeight: 1.0, brandWeight: 1.5, priceWeight: 0.8, oemWeight: 1.5
+  },
+  100259: { // Oil Filter — price ყველაზე მნიშვნელოვანია
+    stockWeight: 1.0, brandWeight: 1.0, priceWeight: 1.5, oemWeight: 1.2
+  },
+  100260: { // Air Filter
+    stockWeight: 1.0, brandWeight: 1.0, priceWeight: 1.5, oemWeight: 1.2
+  },
+  100263: { // Cabin Air Filter
+    stockWeight: 1.0, brandWeight: 0.8, priceWeight: 1.5, oemWeight: 1.0
+  },
+  102203: { // Oil — brand ყველაზე მნიშვნელოვანია
+    stockWeight: 1.2, brandWeight: 2.0, priceWeight: 1.0, oemWeight: 0.5
+  },
+  100121: { // Shock Absorber — brand + OEM
+    stockWeight: 1.0, brandWeight: 1.5, priceWeight: 0.9, oemWeight: 1.5
+  },
+};
+
+function getCategoryWeights(categoryId) {
+  return CATEGORY_WEIGHTS[categoryId] || { stockWeight: 1.0, brandWeight: 1.0, priceWeight: 1.0, oemWeight: 1.0 };
+}
+
+ — improved per senior architect review
 const PREMIUM_BRANDS = ['BOSCH','BREMBO','ATE','TRW','MANN','MAHLE','SACHS','FEBI','LUK','SKF','FAG','INA'];
 const GOOD_BRANDS    = ['DELPHI','VALEO','DENSO','NGK','GATES','DAYCO','MEYLE','FEBEST','TOPRAN'];
 const STOPWORDS      = new Set(['for','and','the','of','a','an','to','in','on','at','by','with','is','or']);
@@ -17,8 +52,8 @@ function scoreProduct(product, context = {}) {
   else if (product.stock > 5)   score += 15;
   else if (product.stock > 0)   score += 10;
   const brand = (product.brand||'').toUpperCase();
-  if      (PREMIUM_BRANDS.includes(brand)) score += 10;
-  else if (GOOD_BRANDS.includes(brand))    score += 7;
+  if      (PREMIUM_BRANDS.includes(brand)) score += Math.round(10 * cw.brandWeight);
+  else if (GOOD_BRANDS.includes(brand))    score += Math.round(7 * cw.brandWeight);
   else if (brand && brand !== 'GENERIC')   score += 4;
   const price = parseFloat(product.price)||0;
   if (price <= 0) { score -= 10; } else {
