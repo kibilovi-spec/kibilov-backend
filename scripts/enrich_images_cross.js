@@ -64,7 +64,7 @@ async function getImageFromCrossRefs(articleId) {
     if (!imageUrl) { notFound++; await sleep(300); continue; }
 
     await prisma.$executeRaw`
-      UPDATE products SET images = ${[imageUrl]}
+      UPDATE products SET images = ARRAY[${imageUrl}]::text[]
       WHERE id = ${p.id}
     `;
     updated++;
