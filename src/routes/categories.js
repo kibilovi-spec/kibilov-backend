@@ -63,9 +63,8 @@ router.get('/', async (req, res) => {
       };
     }));
 
-    const filtered = result.filter(c => c.productCount > 0);
-    await cache.set(cacheKey, filtered, 1800);
-    res.json({ success: true, data: filtered });
+    await cache.set(cacheKey, result, 1800);
+    res.json({ success: true, data: result });
   } catch(e) {
     console.error('categories error:', e);
     res.status(500).json({ success: false, error: e.message });
