@@ -75,4 +75,21 @@ router.post('/visit', async (req, res) => {
   } catch(e) { console.error('visit error:', e.message); res.json({ ok: false }); }
 });
 
+
+// POST /analytics/impressions — product show tracking
+router.post('/impressions', async (req, res) => {
+  try {
+    const { analyticsId, products } = req.body;
+    // products = [{productId, position}, ...]
+    if (analyticsId && Array.isArray(products) && products.length > 0) {
+      for (const p of products.slice(0, 20)) {
+        if (!p.productId) continue;
+        await prisma.$executeRaw`INSERT INTO search_impressions (analytics_id, product_id, position) VALUES (${analyticsId}, ${p.productId}, ${p.position||0}) ON CONFLICT DO NOTHING`;
+      }
+    }
+    res.json({ success: true });
+  } catch(e) {
+    res.json({ success: false });
+  }
+});
 module.exports = router;
