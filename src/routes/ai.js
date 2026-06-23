@@ -293,6 +293,9 @@ CV joint, control arm, bushing, wheel hub, tie rod, oil seal
 router.post('/chat', async (req, res) => {
   try {
     let { message, context } = req.body;
+    // Vehicle canonicalization
+    const { normalizeVehicleQuery } = require('../services/synonyms');
+    if (message) message = normalizeVehicleQuery(message);
     // Vehicle search expansions — only for vehicle_cache lookup, NOT for product matching
     const VEHICLE_SEARCH_EXPANSIONS = {
       'fit': ['fit', 'jazz'],
