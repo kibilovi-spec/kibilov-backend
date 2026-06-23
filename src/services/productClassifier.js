@@ -32,6 +32,10 @@ const RULES = [
   { match: /გამოხდილი წყალი|distilled.?water/i, cat: 105500, name: 'Distilled Water' },
   { match: /საქარე მინის წყალი|windscreen.?wash/i, cat: 100007, name: 'Washer Fluid' },
   { match: /სპორტული ჰ|sports.?filter|sport.?air/i, cat: 100260, name: 'Sports Air Filter' },
+
+  { skuMatch: /^W-7/i, cat: 105500, name: 'Car Chemical (W-7)' },
+  { match: /ქარ.?[XХ]|საბურავ.*საპრიალ|შამპუნ|ბიტუმ|Cocpit|AirCon.?Fresh|Underbody|Upholstery|Starter.?spray/i, cat: 105500, name: 'Car Care' },
+  { match: /penetrat|Lubricant.*M-40|MANNOL.*oil/i, cat: 105500, name: 'Car Chemical' },
   // === FILTERS ===
   { match: /ჰაერის ფილტ|air.?filter/i, cat: 100260, name: 'Air Filter' },
   { match: /ზეთის ფილტ|oil.?filter/i, cat: 100259, name: 'Oil Filter' },
