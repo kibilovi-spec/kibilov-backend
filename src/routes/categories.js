@@ -5,18 +5,18 @@ const { prisma, authenticate, requireAdmin } = require('../middleware/auth');
 router.get('/', async (req, res) => {
   try {
     const cache = require('../services/cache');
-    const cacheKey = 'categories:autodoc:v1';
+    const cacheKey = 'categories:autodoc:v2';
     const cached = await cache.get(cacheKey);
     if (cached) return res.json({ success: true, data: cached });
 
     const parents = await prisma.$queryRaw`
-      SELECT ac.autodoc_id as id, ac.name_en as name, ac.name_ka, ac.slug,
-        COUNT(DISTINCT p.id)::int as product_count
+      SELECT ac.autodoc_id as id, ac.name_en as name, ac.name_ka, ac.slug, ac.sort_order,
+        (SELECT COUNT(*)::int FROM products p
+         JOIN autodoc_categories child ON child.autodoc_id = p.autodoc_category_id
+         WHERE child.parent_id = ac.autodoc_id AND p."isActive" = true) as product_count
       FROM autodoc_categories ac
-      LEFT JOIN products p ON p.autodoc_category_id = ac.autodoc_id AND p."isActive" = true
       WHERE ac.level = 1
-      GROUP BY ac.autodoc_id, ac.name_en, ac.name_ka, ac.slug
-      ORDER BY COUNT(DISTINCT p.id) DESC
+      ORDER BY ac.sort_order ASC
     `;
 
     const result = await Promise.all(parents.map(async (c) => {
@@ -26,8 +26,8 @@ router.get('/', async (req, res) => {
         FROM autodoc_categories ac
         LEFT JOIN products p ON p.autodoc_category_id = ac.autodoc_id AND p."isActive" = true
         WHERE ac.parent_id = ${c.id} AND ac.level = 2
-        GROUP BY ac.autodoc_id, ac.slug, ac.name_ka, ac.name_en, ac.image_url
-        ORDER BY COUNT(DISTINCT p.id) DESC
+        GROUP BY ac.autodoc_id, ac.slug, ac.name_ka, ac.name_en, ac.image_url, ac.sort_order
+        ORDER BY ac.sort_order ASC, COUNT(DISTINCT p.id) DESC
       `;
       const childCount = children.reduce((s, ch) => s + Number(ch.product_count), 0);
       return {
@@ -36,7 +36,7 @@ router.get('/', async (req, res) => {
         name: c.name_ka || c.name, nameKa: c.name_ka || c.name, nameEn: c.name,
         icon: `/images/categories/${c.id}.png`,
         imageUrl: `/images/categories/${c.id}.png`,
-        productCount: Number(c.product_count) + childCount,
+        productCount: parseInt(String(c.product_count || 0)) + childCount,
         subcategories: children.map(s => ({
           id: String(s.id), slug: s.slug || String(s.id),
           name: s.name_ka || s.name, nameKa: s.name_ka || s.name, nameEn: s.name,
