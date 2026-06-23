@@ -17,6 +17,21 @@ const RULES = [
   { skuMatch: /^GDB/i, cat: 100030, name: 'Brake Pad (GDB)' },
   { skuMatch: /^BB\s/i, cat: 100030, name: 'Brake Pad (BB)' },
   
+
+  // === ADDITIONAL SKU RULES ===
+  { skuMatch: /^(WO-|WU)/i, cat: 102203, name: 'Engine Oil (WO/WU)' },
+  { skuMatch: /^OF\s/i, cat: 100259, name: 'Oil Filter (OF)' },
+  { skuMatch: /^SB\s/i, cat: 100260, name: 'Air Filter (SB)' },
+  // === ADDITIONAL NAME RULES ===
+  { match: /MOTUL|MOBIL|SHELL|PETRONAS|ზეთი.*0W|ზეთი.*5W|ზეთი.*10W/i, cat: 102203, name: 'Engine Oil (brand)' },
+  { match: /antifreeze|ანტიფრიზ/i, cat: 100007, name: 'Coolant/Antifreeze' },
+  { match: /engine.?flush|motor.?flush|engine.?treatment|stop.?smoke|oil.?treatment|octane.?boost|steering.?stop.?leak/i, cat: 105500, name: 'Additive/Chemical' },
+  { match: /სუნამო|air.?freshener|ლითელ.?ჯო/i, cat: 105500, name: 'Air Freshener' },
+  { match: /epoxy|RTV|silicone|upholster|foam.?clean/i, cat: 105500, name: 'Chemical' },
+  { match: /spray.?paint|საღებავ/i, cat: 105500, name: 'Spray Paint' },
+  { match: /გამოხდილი წყალი|distilled.?water/i, cat: 105500, name: 'Distilled Water' },
+  { match: /საქარე მინის წყალი|windscreen.?wash/i, cat: 100007, name: 'Washer Fluid' },
+  { match: /სპორტული ჰ|sports.?filter|sport.?air/i, cat: 100260, name: 'Sports Air Filter' },
   // === FILTERS ===
   { match: /ჰაერის ფილტ|air.?filter/i, cat: 100260, name: 'Air Filter' },
   { match: /ზეთის ფილტ|oil.?filter/i, cat: 100259, name: 'Oil Filter' },
