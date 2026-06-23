@@ -1,5 +1,7 @@
 'use strict';
 const { isLocalBrand } = require('./localBrandRules');
+const { isEnabled } = require('./featureFlags');
+// learningLoop lazy-loaded when data available
 // Ranking Engine v3
 
 // Category-aware ranking weights
@@ -76,6 +78,10 @@ function scoreProduct(product, context = {}) {
   if (product._cartRate)     score += Math.min(product._cartRate*10, 8);
   if (product._purchaseRate) score += Math.min(product._purchaseRate*10, 12);
   if (!product.stock || product.stock <= 0) score = Math.round(score * 0.7);
+  // behavior signals (Phase 3 — lazy boost when data exists)
+  if (isEnabled('behaviorSignals') && context._behaviorScore) {
+    score += Math.round(context._behaviorScore * 20);
+  }
   return score;
 }
 function rankProducts(products, context = {}) {
