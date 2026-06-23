@@ -1218,9 +1218,11 @@ router.post('/chat', async (req, res) => {
     let analyticsId = null;
     try {
       const _q = message || '';
+      // search_type detection
+      const sType = parsed.vin ? 'vin' : /^[A-Z0-9\-\.\s]{4,20}$/.test(_q.trim()) && !parsed.brand ? 'oem' : parsed.brand ? 'keyword' : 'keyword';
       const rows = await prisma.$queryRaw`
-        INSERT INTO search_analytics (query, brand, model, year, part_ka, results_count, clicked, cart_added, purchased)
-        VALUES (${_q}, ${parsed.brand||null}, ${parsed.model||null}, ${parsed.year?String(parsed.year):null}, ${parsed.part_ka||_q}, ${scored.length}, false, false, false)
+        INSERT INTO search_analytics (query, brand, model, year, part_ka, results_count, clicked, cart_added, purchased, search_type)
+        VALUES (${_q}, ${parsed.brand||null}, ${parsed.model||null}, ${parsed.year?String(parsed.year):null}, ${parsed.part_ka||_q}, ${scored.length}, false, false, false, ${sType})
         RETURNING id
       `;
       analyticsId = rows?.[0]?.id ?? null;
