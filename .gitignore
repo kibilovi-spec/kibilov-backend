@@ -5,3 +5,10 @@ node_modules/
 uploads/
 *.log
 .next/
+
+# Backup files (timestamped, generated during editing)
+*.bak
+*.bak.*
+*.bak[0-9]*
+*.bak_*
+.env.bak.*
