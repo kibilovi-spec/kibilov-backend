@@ -126,6 +126,14 @@ const searchCrossNumbers = (articleNo, articleType, langId=4) =>
     { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
   ).then(r => r.data));
 
+
+// Cross-references through OEM numbers, by supplier+articleNo (used by enrich_oem_full.js)
+const getCrossRefsBySupplierAndNo = (supplierId, articleNo) =>
+  call(() => api.post('/api/artlookup/search-for-cross-references-through-oem-numbers',
+    new URLSearchParams({ supplierId, articleNo }),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  ).then(r => r.data));
+
 module.exports = {
   vinCheck, vinDecodeV1, vinDecodeV2, vinDecodeV3, vinDecodeV5,
   getManufacturersByType, getManufacturerById, getManufacturerTypes,
@@ -143,5 +151,5 @@ module.exports = {
   getSuppliersList, getLanguagesList, getCountriesList,
   getArticleFullDetails, getArticleSpecsBulk, getProductNamesByVehicle,
   getArticleDetailsByNo, getCompatibleVehiclesByOem, getCompatibleVehiclesByOemAndManufacturer,
-  getAnalogByArticleNo, searchCrossNumbers,
+  getAnalogByArticleNo, searchCrossNumbers, getCrossRefsBySupplierAndNo,
 };
