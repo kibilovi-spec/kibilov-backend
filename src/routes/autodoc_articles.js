@@ -1,0 +1,227 @@
+'use strict';
+const express = require('express');
+const router = express.Router();
+const axios = require('axios');
+const redis = require('redis');
+const { Pool } = require('pg');
+const pgPool = new Pool({ connectionString: process.env.DATABASE_URL });
+const redisClient = redis.createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+redisClient.connect().catch(() => {});
+
+const HOST = 'autodoc-parts-catalog.p.rapidapi.com';
+const BASE = `https://${HOST}`;
+const HEADERS = {
+  'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+  'x-rapidapi-host': HOST,
+};
+
+// GET /api/autodoc/articles?vehicleId=12487&categoryId=100030
+router.get('/articles', async (req, res) => {
+  try {
+    const { vehicleId, categoryId } = req.query;
+    if (!categoryId) return res.json({ success: true, data: [] });
+    const cacheKey = `articles:${categoryId}:${vehicleId||'default'}`;
+    try {
+      const cached = await redisClient.get(cacheKey);
+      if (cached) return res.json({ success: true, data: JSON.parse(cached), cached: true });
+    } catch {}
+    const vid = vehicleId || '19942';
+    // slug → numeric id კონვერტაცია
+    let catId = categoryId;
+    if (isNaN(parseInt(categoryId))) {
+      try {
+        const r = await pgPool.query('SELECT autodoc_id FROM autodoc_categories WHERE slug=$1 LIMIT 1', [categoryId]);
+        if (r.rows.length > 0) catId = r.rows[0].autodoc_id;
+        else return res.json({ success: true, data: [] });
+      } catch { return res.json({ success: true, data: [] }); }
+    }
+
+    const r = await axios.get(
+      `https://autodoc-parts-catalog.p.rapidapi.com/api/articles/list/type-id/1/vehicle-id/${vid}/category-id/${catId}/lang-id/4`,
+      { headers: HEADERS, timeout: 10000 }
+    );
+
+    const arts = r.data?.articles || [];
+    const data = arts.map((a) => ({
+      id: 'autodoc_' + a.articleId,
+      sku: a.articleNo,
+      nameEn: a.articleProductName,
+      nameKa: a.articleProductName,
+      brand: a.supplierName,
+      images: a.s3image ? [a.s3image] : [],
+      price: null,
+      stock: 1,
+      source: 'autodoc',
+      oemCodes: [a.articleNo],
+      autodocArticleId: a.articleId,
+      descriptionEn: (a.articleAllSpecifications||[]).map(s=>s.criteriaName+': '+s.criteriaValue).join('\n'),
+    }));
+
+    if (data.length > 0) { try { await redisClient.setEx(cacheKey, 3600, JSON.stringify(data)); } catch {} }
+    res.json({ success: true, data });
+  } catch(e) {
+    res.json({ success: true, data: [] });
+  }
+});
+
+// GET /api/autodoc/featured — homepage + /products
+router.get('/featured', async (req, res) => {
+  try {
+    try {
+      const cached = await redisClient.get('featured:default');
+      if (cached) return res.json({ success: true, data: JSON.parse(cached), cached: true });
+    } catch {}
+    // პოპულარული vehicle + კატეგორიები
+    const COMBOS = [
+      { vehicleId: 19942,  categoryId: 100259 },  // KIA CEE'D — Oil Filter
+      { vehicleId: 108275, categoryId: 100259 },  // Mercedes W204 — Oil Filter
+      { vehicleId: 19942,  categoryId: 100260 },  // KIA — Air Filter
+      { vehicleId: 19942,  categoryId: 100263 },  // KIA — Cabin Filter
+      { vehicleId: 19942,  categoryId: 100034 },  // KIA — Shock Absorber
+      { vehicleId: 108275, categoryId: 100034 },  // Mercedes — Shock Absorber
+      { vehicleId: 19942,  categoryId: 100003 },  // KIA — Spark Plug
+      { vehicleId: 19942,  categoryId: 100028 },  // KIA — Timing Belt
+      { vehicleId: 19942,  categoryId: 100016 },  // KIA — Water Pump
+      { vehicleId: 108275, categoryId: 100030 },  // Mercedes — Brake Pad
+      { vehicleId: 19942,  categoryId: 100032 },  // KIA — Brake Disc
+      { vehicleId: 108275, categoryId: 100032 },  // Mercedes — Brake Disc
+      { vehicleId: 19942,  categoryId: 100001 },  // KIA — Engine Mount
+      { vehicleId: 19942,  categoryId: 100011 },  // KIA — CV Joint
+      { vehicleId: 108275, categoryId: 100016 },  // Mercedes — Water Pump
+    ];
+
+    const results = [];
+    const seen = new Set();
+
+    for (const { vehicleId, categoryId } of COMBOS) {
+      if (results.length >= 40) break;
+      try {
+        const r = await axios.get(
+          `https://autodoc-parts-catalog.p.rapidapi.com/api/articles/list/type-id/1/vehicle-id/${vehicleId}/category-id/${categoryId}/lang-id/4`,
+          { headers: HEADERS, timeout: 8000 }
+        );
+        const arts = r.data?.articles || [];
+        for (const a of arts.slice(0, 3)) {
+          if (!seen.has(a.articleId)) {
+            seen.add(a.articleId);
+            results.push({
+              id: 'autodoc_' + a.articleId,
+              sku: a.articleNo,
+              nameEn: a.articleProductName,
+              nameKa: a.articleProductName,
+              brand: a.supplierName,
+              images: a.s3image ? [a.s3image] : [],
+              price: null,
+              stock: 1,
+              source: 'autodoc',
+              oemCodes: [a.articleNo],
+              autodocArticleId: a.articleId,
+            });
+          }
+        }
+      } catch {}
+    }
+
+    if (results.length > 0) { try { await redisClient.setEx('featured:default', 7200, JSON.stringify(results)); } catch {} }
+    res.json({ success: true, data: results });
+  } catch(e) {
+    res.json({ success: true, data: [] });
+  }
+});
+
+// GET /api/autodoc/article/:articleId — single article details
+router.get('/article/:articleId', async (req, res) => {
+  try {
+    const { articleId } = req.params;
+    const r = await axios.get(
+      `https://autodoc-parts-catalog.p.rapidapi.com/api/articles/details/article-id/${articleId}/lang-id/4`,
+      { headers: HEADERS, timeout: 10000 }
+    );
+    const d = r.data;
+    if (!d || !d.article) return res.json({ success: false, data: null });
+
+    const specs = {};
+    for (const s of d.articleAllSpecifications || []) {
+      specs[s.criteriaName] = s.criteriaValue;
+    }
+
+    const product = {
+      id: 'autodoc_' + articleId,
+      sku: d.article.articleNo,
+      nameEn: d.article.articleProductName,
+      nameKa: d.article.articleProductName,
+      brand: d.article.supplierName,
+      images: [],
+      price: null,
+      stock: 1,
+      source: 'autodoc',
+      oemCodes: (d.articleOemNo || []).map((o) => o.oemDisplayNo).filter(Boolean),
+      descriptionEn: Object.entries(specs).map(([k,v]) => k+': '+v).join('\n'),
+      autodocArticleId: Number(articleId),
+    };
+
+    // სურათი
+    try {
+      const mr = await axios.get(
+        `https://autodoc-parts-catalog.p.rapidapi.com/api/articles/article-all-media-info?langId=4&articleId=${articleId}`,
+        { headers: HEADERS, timeout: 8000 }
+      );
+      const imgs = (mr.data || []).filter((m) => m.s3image && !m.s3image.toLowerCase().includes('.pdf') && (m.mediaInformation === 'Photo' || m.s3image.match(/\.(webp|jpg|jpeg|png)$/i))).map((m) => m.s3image);
+      product.images = imgs;
+    } catch {}
+
+    res.json({ success: true, data: product });
+  } catch(e) {
+    res.json({ success: false, data: null });
+  }
+});
+
+module.exports = router;
+
+// GET /api/autodoc/by-brand?brand=TRW&categoryId=100030(optional)
+const BRAND_SUPPLIER_MAP = {
+  'TRW': 161, 'BOSCH': 30, 'NGK': 15, 'KYB': 85, 'MEYLE': 144,
+  'SACHS': 32, 'DAYCO': 42, 'VALEO': 21, 'MAHLE': 287, 'CASTROL': 207,
+  'DENSO': 66, 'LIQUI MOLY': 222, 'MANN': 4, 'FEBI': 101, 'MANN-FILTER': 4,
+  'KYB': 85, 'MEYLE': 144, 'BREMBO': 12, 'HELLA': 25, 'GATES': 39
+};
+router.get('/by-brand', async (req, res) => {
+  const { brand, categoryId, vehicleId } = req.query;
+  if (!brand) return res.json({ success: true, data: [] });
+  const supplierId = BRAND_SUPPLIER_MAP[brand.toUpperCase()] || BRAND_SUPPLIER_MAP[brand];
+  if (!supplierId) return res.json({ success: true, data: [], message: 'supplier not found' });
+  const cacheKey = `brand:${brand.toUpperCase()}:${vehicleId||'default'}`;
+  try {
+    const cached = await redisClient.get(cacheKey);
+    if (cached) return res.json({ success: true, data: JSON.parse(cached), cached: true });
+  } catch {}
+  try {
+    const vid = vehicleId || '19942';
+    const categories = categoryId ? [categoryId] : ['100030','100259','100260','100032','100011','100002','100006','100016','100008','100010','100214'];
+    const brandUp = brand.toUpperCase();
+    const ALIASES = {'MANN': 'MANN-FILTER', 'FEBI': 'FEBI BILSTEIN'};
+    const targetBrand = ALIASES[brandUp] || brandUp;
+    const results = await Promise.all(categories.map(async catId => {
+      try {
+        const _r = await axios.get(`${BASE}/api/articles/list/type-id/1/vehicle-id/${vid}/category-id/${catId}/lang-id/4`, { headers: HEADERS, timeout: 12000 });
+        return (_r.data?.articles || []).filter(a => {
+          const s = (a.supplierName || '').toUpperCase();
+          return s === brandUp || s === targetBrand;
+        });
+      } catch { return []; }
+    }));
+    let arts = results.flat();
+    const data = arts.slice(0, 20).map(a => ({
+      id: 'autodoc_' + a.articleId,
+      sku: a.articleNo,
+      nameEn: a.articleProductName,
+      nameKa: a.articleProductName,
+      brand: a.supplierName,
+      images: a.s3image ? [a.s3image] : [],
+      price: null, stock: 1, source: 'autodoc',
+      autodocArticleId: a.articleId,
+    }));
+    if (data.length > 0) { try { await redisClient.setEx(cacheKey, 3600, JSON.stringify(data)); } catch {} }
+    res.json({ success: true, data });
+  } catch(e) { res.json({ success: true, data: [] }); }
+});

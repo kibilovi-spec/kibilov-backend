@@ -1,0 +1,410 @@
+[
+  {
+    "sku": "0 356 100 100",
+    "name": "ბაბინის ჩიბუხი",
+    "categoryId": 100153,
+    "confidence": 76
+  },
+  {
+    "sku": "0 356 150 022",
+    "name": "სანთლის ჩიბუხი",
+    "categoryId": 100153,
+    "confidence": 76
+  },
+  {
+    "sku": "0003385610",
+    "name": "ნაკანეჩნიკი შიგნითა",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "006553",
+    "name": "ჰერმეტიკი, Dirco HT, 70 მლ, პროფესიონალური, შავი, +315°C",
+    "categoryId": 105500,
+    "confidence": 80
+  },
+  {
+    "sku": "103 474",
+    "name": "რაზვალის ტულკა წინა",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "1683301535",
+    "name": "ნაკანეჩნიკი მარცხენა",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "1683301635",
+    "name": "ნაკანეჩნიკი მარჯვენა",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "22448-EA000",
+    "name": "სანთლის ჩიბუხი",
+    "categoryId": 100153,
+    "confidence": 76
+  },
+  {
+    "sku": "30520PW003",
+    "name": "სანთლის ჩიბუხი",
+    "categoryId": 100153,
+    "confidence": 76
+  },
+  {
+    "sku": "30521PWA003",
+    "name": "სანთლის ჩიბუხი",
+    "categoryId": 100153,
+    "confidence": 76
+  },
+  {
+    "sku": "341936",
+    "name": "გადაბმულობის ჯვარა ბულდოგი 27x88 MB Sprinter 06-14",
+    "categoryId": 100707,
+    "confidence": 85
+  },
+  {
+    "sku": "40MR0100",
+    "name": "პადვესნოი MB Sprinter 95-06",
+    "categoryId": 100062,
+    "confidence": 85
+  },
+  {
+    "sku": "430-17",
+    "name": "მინისმწმენდი 17\"/430mm",
+    "categoryId": 100133,
+    "confidence": 85
+  },
+  {
+    "sku": "480-19",
+    "name": "მინისმწმენდი 19\"/480mm",
+    "categoryId": 100133,
+    "confidence": 85
+  },
+  {
+    "sku": "48640-3U025",
+    "name": "ნაკანეჩნიკი მარცხენა",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "500-20",
+    "name": "მინისმწმენდი 20\"/500mm",
+    "categoryId": 100133,
+    "confidence": 85
+  },
+  {
+    "sku": "5418515641561",
+    "name": "საწვავის ავზის სახურავი Ford Transit V-184 00-06",
+    "categoryId": 102731,
+    "confidence": 85
+  },
+  {
+    "sku": "550-22",
+    "name": "მინისმწმენდი 22\"/550mm",
+    "categoryId": 100133,
+    "confidence": 85
+  },
+  {
+    "sku": "5984620143267",
+    "name": "წინა ციმციმა (ყვითელი) MB Sprinter L 95-06",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "600-24",
+    "name": "მინისმწმენდი 24\"/600mm",
+    "categoryId": 100133,
+    "confidence": 85
+  },
+  {
+    "sku": "638 333 08 14",
+    "name": "რაზვალის ტულკა წინა",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "6394600048",
+    "name": "ნაკანეჩნიკი მარცხენა",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "650193",
+    "name": "ციმციმას ჩამრთველი",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "88VB4826AA",
+    "name": "პადვესნოი Ford Transit 1988-1991",
+    "categoryId": 100062,
+    "confidence": 85
+  },
+  {
+    "sku": "90373778",
+    "name": "რაზვალი ტულკა წინა",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "90498738",
+    "name": "რაზვალი ტულკა წინა",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "9462014745113",
+    "name": "წინა ციმციმა (ყვითელი) MB Sprinter R 95-06",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "746-ECEM",
+    "name": "პადვესნოი Ford Transit 30' 92-14",
+    "categoryId": 100062,
+    "confidence": 85
+  },
+  {
+    "sku": "A0018204921",
+    "name": "წინა ფრთის ციმციმა",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "AKM 00-121-0BL",
+    "name": "წინა ციმციმა /MB Sprinter L 95-06",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "AKM 00-221-0BR",
+    "name": "წინა ციმციმა",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "AKM 09-105-0BU",
+    "name": "საწვავის ავზის სახურავის ბუდე",
+    "categoryId": 102731,
+    "confidence": 85
+  },
+  {
+    "sku": "AKM 13-376-0DL",
+    "name": "წინა ფრთის ციმციმა Ford Transit V-347 L 06-14",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "AKM 13-376-0DR",
+    "name": "წინა ფრთის ციმციმა Ford Transit V-347 R 06-14",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "AKM 15-909-9BL",
+    "name": "წინა ციმციმა",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "AKM 47-249-6AA",
+    "name": "ყუმბარა შიგნითა",
+    "categoryId": 100062,
+    "confidence": 85
+  },
+  {
+    "sku": "AKM 47-456-5RE",
+    "name": "ყუმბარა გარეთა Ford Transit V-184 2.0D FWD 00-06",
+    "categoryId": 100062,
+    "confidence": 85
+  },
+  {
+    "sku": "AKM 61-556-0BL",
+    "name": "გვერდითა ციმციმა",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "ECM 572",
+    "name": "რაზვალის ტულკა წინა",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "ECM 747",
+    "name": "პადვესნოი Ford Transit 45' 92-00",
+    "categoryId": 100062,
+    "confidence": 85
+  },
+  {
+    "sku": "ECM 818",
+    "name": "რაზვალის ტულკა უკანა",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "ECM 822",
+    "name": "რაზვალის ტულკა წინა",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "ECM 910",
+    "name": "პადვესნოი Transit V-347 V-363 35' 06-",
+    "categoryId": 100062,
+    "confidence": 85
+  },
+  {
+    "sku": "ECZPL005A",
+    "name": "სანთლის ჩიბუხი",
+    "categoryId": 100153,
+    "confidence": 76
+  },
+  {
+    "sku": "F-30520-PWA-003",
+    "name": "სანთლის ჩიბუხი",
+    "categoryId": 100153,
+    "confidence": 76
+  },
+  {
+    "sku": "F-90919-11111",
+    "name": "სანთლის ჩიბუხი",
+    "categoryId": 100153,
+    "confidence": 76
+  },
+  {
+    "sku": "YGG375",
+    "name": "საპოხი მასალა გრაფიტნი Grease YUKO Graphite",
+    "categoryId": 105500,
+    "confidence": 76
+  },
+  {
+    "sku": "H-282",
+    "name": "ნაკანეჩნიკი HONDA JAZZ 2007-2014 HONDA FIT 2007-2013 LEFT",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "M A2021251",
+    "name": "წინა ფრთის ციმციმა",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "MD198128",
+    "name": "სანთლის ჩიბუხის რგოლი",
+    "categoryId": 100153,
+    "confidence": 76
+  },
+  {
+    "sku": "MKS 2001",
+    "name": "რესორის ტულკა წინა",
+    "categoryId": 100810,
+    "confidence": 80
+  },
+  {
+    "sku": "MKS 2020",
+    "name": "რესორის ტულკა /წინა",
+    "categoryId": 100810,
+    "confidence": 80
+  },
+  {
+    "sku": "MKS 406",
+    "name": "რაზვალის ტულკა /უკანა",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "MKS 418",
+    "name": "რესორის ტულკა /უკანა",
+    "categoryId": 100810,
+    "confidence": 80
+  },
+  {
+    "sku": "MKS 503",
+    "name": "რაზვალის ტულკა უკანა",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "N-851",
+    "name": "ნაკანეჩნიკი 2010-2019 & F15 NISSAN JUKE RIGHT",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "SB 457",
+    "name": "რაზვალი ტულკა TOYOTA COROLLA 02-07 TOYOTA PRIUS 03-09",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "SB 487",
+    "name": "რაზვალის ტულკა წინა",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "SB 716",
+    "name": "რაზვალი ტულკა ROGUE 2014–2020 NISSAN JUKE 2010-2019 F15D85211KA0A",
+    "categoryId": 100203,
+    "confidence": 85
+  },
+  {
+    "sku": "T-901",
+    "name": "ნაკანეჩნიკი TOYOTA PRIUS RIGHT 2009-2015 & XW30",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "AKM 05-034-0CU",
+    "name": "გვერდითა ციმციმა FORD TRANSIT 00-13",
+    "categoryId": 100463,
+    "confidence": 80
+  },
+  {
+    "sku": "639 410 04 81",
+    "name": "პადვესნოი წინა",
+    "categoryId": 100062,
+    "confidence": 85
+  },
+  {
+    "sku": "1208008",
+    "name": "სანთლის ჩიბუხი",
+    "categoryId": 100153,
+    "confidence": 76
+  },
+  {
+    "sku": "T-281",
+    "name": "ნაკანეჩნიკი მარჯვენა",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "6394600348",
+    "name": "ნაკანეჩნიკი მარჯვენა",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "FO-481",
+    "name": "ნაკანეჩნიკი მარჯვენა Ford Escape 13-19 Ford C-MAX 13-19",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "FO-482",
+    "name": "ნაკანეჩნიკი მარცხენა Ford Escape 13-19 Ford C-MAX 13-19",
+    "categoryId": 100601,
+    "confidence": 85
+  },
+  {
+    "sku": "SB 823",
+    "name": "რაზვალი ტულკა Ford Escape 13-19 VOLVO V40 12-19",
+    "categoryId": 100203,
+    "confidence": 85
+  }
+]
