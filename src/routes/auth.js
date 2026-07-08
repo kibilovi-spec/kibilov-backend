@@ -55,7 +55,7 @@ router.post('/register', [
 
 // POST /api/auth/login
 router.post('/login', [
-  body('email').isEmail().normalizeEmail(),
+  body('email').isEmail(),
   body('password').notEmpty(),
 ], async (req, res) => {
   const lang = req.body.lang || 'ka';

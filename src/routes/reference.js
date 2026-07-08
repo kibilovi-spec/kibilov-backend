@@ -50,7 +50,7 @@ router.get('/lookup', async (req, res) => {
     }
 
     res.json({ make: makeLow, model: modelLow, generation, part: partNorm, codes, capacity });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[reference.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/reference/service?make=toyota&model=camry&km=120000
@@ -75,7 +75,7 @@ router.get('/service', async (req, res) => {
     });
 
     res.json({ make: makeLow, model: modelLow, km: kmNum, intervals: rows });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[reference.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/reference/engine?code=CAYC
@@ -87,7 +87,7 @@ router.get('/engine', async (req, res) => {
       where: { engineCode: { equals: code.toUpperCase(), mode: 'insensitive' } }
     });
     res.json({ code, vehicles: rows });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[reference.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 module.exports = router;
@@ -108,7 +108,7 @@ router.get('/intelligence', async (req, res) => {
       take: 8
     });
     res.json({ make, model, generation, engine, parts: rows });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[reference.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/reference/popular?make=mercedes&model=c-class
@@ -131,7 +131,7 @@ router.get('/popular', async (req, res) => {
       LIMIT ${lim}
     `;
     res.json({ popular: logs });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[reference.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/admin/search-analytics
@@ -156,7 +156,7 @@ router.get('/search-analytics', async (req, res) => {
       LIMIT 10
     `;
     res.json({ popular, notFound });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[reference.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/reference/compatibility?code=GDB3445
@@ -170,5 +170,5 @@ router.get('/compatibility', async (req, res) => {
       orderBy: [{ make: 'asc' }, { model: 'asc' }]
     });
     res.json({ code, compatible: rows });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[reference.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });

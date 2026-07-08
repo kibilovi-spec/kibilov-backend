@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireAdmin, requireStaffOrAdmin } = require('../middleware/auth');
 const { syncFromFina } = require('../services/fina');
 const cache = require('../services/cache');
 const prisma = new PrismaClient();
@@ -45,7 +45,7 @@ deliveryRouter.put('/zones/:zone', authenticate, requireAdmin, async (req, res) 
 
 // ── ADMIN ─────────────────────────────────────────────────────────────────────
 const adminRouter = express.Router();
-adminRouter.use(authenticate, requireAdmin);
+adminRouter.use(authenticate, requireStaffOrAdmin);
 
 adminRouter.get('/dashboard', async (req, res) => {
   try {
@@ -69,7 +69,9 @@ adminRouter.get('/dashboard', async (req, res) => {
     // Kibilov-specific stats
     const [
       catalogStats,
-      totalWithOem, totalCrossRefs,
+      totalWithOem,
+      totalCrossRefs,
+      _crossRefCount,
       searchTotal, searchFailed,
       garageCount, compatCount, reminderCount
     ] = await Promise.all([
@@ -77,8 +79,8 @@ adminRouter.get('/dashboard', async (req, res) => {
       prisma.$queryRaw`SELECT COUNT(*) as total, SUM(stock) as total_stock, ROUND(SUM(price * stock), 2) as total_value, ROUND(AVG(price::numeric), 2) as avg_price FROM products WHERE "isActive" = true`.then(r => ({total:Number(r[0]?.total||0),total_stock:Number(r[0]?.total_stock||0),total_value:Number(r[0]?.total_value||0),avg_price:Number(r[0]?.avg_price||0)})),
       prisma.product.count({ where: { alternativeSearchKeys: { isEmpty: false } } }),
       prisma.$queryRaw`SELECT COUNT(*) as cnt FROM cross_reference`.then(r => Number(r[0]?.cnt || 0)),
-      prisma.$queryRaw`SELECT COUNT(*) as cnt FROM search_knowledge`.then(r => Number(r[0]?.cnt || 0)).catch(() => 0),
-      prisma.$queryRaw`SELECT COUNT(*) as cnt FROM search_knowledge WHERE success = false`.then(r => Number(r[0]?.cnt || 0)).catch(() => 0),
+      prisma.$queryRaw`SELECT COUNT(*) as cnt FROM search_analytics`.then(r => Number(r[0]?.cnt || 0)).catch(() => 0),
+      prisma.$queryRaw`SELECT COUNT(*) as cnt FROM search_analytics WHERE "resultCount" = 0`.then(r => Number(r[0]?.cnt || 0)).catch(() => 0),
       prisma.userVehicle.count().catch(() => 0),
       prisma.$queryRaw`SELECT COUNT(*) as cnt FROM compatibility_cache`.then(r => Number(r[0]?.cnt || 0)).catch(() => 0),
       prisma.maintenanceReminder.count().catch(() => 0),
@@ -132,7 +134,7 @@ adminRouter.get('/dashboard', async (req, res) => {
         backend: true, db: true, autodoc: true, telegram: true
       }
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 adminRouter.get('/users', async (req, res) => {
@@ -147,6 +149,7 @@ adminRouter.get('/users', async (req, res) => {
       prisma.user.findMany({ where, skip:(parseInt(page)-1)*parseInt(limit), take:parseInt(limit),
         orderBy:{ createdAt:'desc' },
         select:{ id:true, name:true, email:true, phone:true, role:true, isActive:true, createdAt:true,
+          isPartnerGarage:true, garageCity:true, b2bTier:true,
           _count:{ select:{ orders:true }},
           orders:{ select:{ total:true }, where:{ paymentStatus:'PAID' }} }}),
       prisma.user.count({ where }),
@@ -155,21 +158,31 @@ adminRouter.get('/users', async (req, res) => {
       ...u, totalSpent: u.orders.reduce((s, o) => s + Number(o.total), 0), orders: undefined
     }));
     res.json({ users: enriched, total });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
-adminRouter.patch('/users/:id/role', async (req, res) => {
+adminRouter.patch('/users/:id/role', requireAdmin, async (req, res) => {
   try {
     const u = await prisma.user.update({ where:{ id:req.params.id }, data:{ role:req.body.role }});
     res.json(u);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
+});
+adminRouter.patch('/users/:id/garage', async (req, res) => {
+  try {
+    const { isPartnerGarage, garageCity } = req.body;
+    const data = {};
+    if (isPartnerGarage !== undefined) data.isPartnerGarage = !!isPartnerGarage;
+    if (garageCity !== undefined) data.garageCity = garageCity || null;
+    const u = await prisma.user.update({ where:{ id:req.params.id }, data });
+    res.json(u);
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 adminRouter.patch('/products/:id/stock', async (req, res) => {
   try {
     const p = await prisma.product.update({ where:{ id:req.params.id }, data:{ stock:parseInt(req.body.stock) }});
     res.json(p);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 adminRouter.get('/orders', async (req, res) => {
@@ -190,7 +203,7 @@ adminRouter.get('/orders', async (req, res) => {
       prisma.order.count({ where }),
     ]);
     res.json({ orders, total });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── FINA ──────────────────────────────────────────────────────────────────────
@@ -204,7 +217,7 @@ finaRouter.post('/sync', async (req, res) => {
     await cache.flush('search:*');
     await cache.flush('compat:*');
     res.json({ synced: result.synced || 0, message: 'FINA sync დასრულდა, cache გაწმინდულია' });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 finaRouter.get('/logs', async (req, res) => {
@@ -221,74 +234,10 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 104
 adminRouter.post('/products/import', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'file missing' });
-    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-    if (!rows.length) return res.status(400).json({ error: 'ფაილი ცარიელია' });
 
-    const errors = [];
-
-    // FINA format helpers
-    const parseFina = (raw) => {
-      // B სვეტი: "წინა კალოტკა MB W210 | GDB1205, TRW1015 |"
-      const s = String(raw || '').trim();
-      const oemMatch = s.match(/\|([^|]+)\|/);
-      const oemCodes = oemMatch
-        ? oemMatch[1].split(',').map(c => c.replace(/[\s\-\.]/g,'').toUpperCase()).filter(c => c.length >= 4)
-        : [];
-      const nameKa = s.split('|')[0].trim();
-      return { nameKa, oemCodes };
-    };
-
-    const extractBrand = (nameKa) => {
-      // მანქანის მარკა nameKa-დან
-      const brands = ['MB','Mercedes','BMW','VW','Volkswagen','Toyota','Hyundai','Kia','Opel',
-        'Ford','Nissan','Mazda','Honda','Subaru','Lexus','Audi','Renault','Peugeot',
-        'Citroen','Skoda','Volvo','Mitsubishi','Chevrolet','Land Rover','Jeep'];
-      const upper = nameKa.toUpperCase();
-      for (const b of brands) {
-        if (upper.includes(b.toUpperCase())) return b === 'MB' ? 'Mercedes-Benz' : b;
-      }
-      return 'Generic';
-    };
-
-    // normalize rows — FINA format support
-    const normalized = rows.map((row, i) => {
-      // FINA სვეტები: A=კოდი, B=დასახელება, C=რაოდ, D=ფასი
-      const sku = String(row['A — კოდი'] || row.SKU || row.sku || row.A || '').trim();
-      const rawB = String(row['B — დასახელება (OEM კოდებით)'] || row.nameKa || row.name || row.B || '').trim();
-
-      if (!sku || !rawB) { errors.push({ row: i+2, sku, error: 'SKU ან დასახელება ცარიელია' }); return null; }
-
-      const { nameKa, oemCodes } = parseFina(rawB);
-      const markup = parseFloat(req.body.markup || '0') || 0;
-      const rawPrice = isNaN(parseFloat(row['D — ფასი (₾)'] || row.price || row.D)) ? null : parseFloat(row['D — ფასი (₾)'] || row.price || row.D);
-      let price = null;
-      if (rawPrice !== null) {
-        if (markup > 0) {
-          // round to nearest integer (5.49 → 5, 5.51 → 6)
-          price = Math.round(rawPrice * (1 + markup/100));
-        } else {
-          price = parseFloat(rawPrice.toFixed(2));
-        }
-      }
-      const stock = isNaN(parseInt(row['C — რაოდენობა'] || row.stock || row.C)) ? 0 : parseInt(row['C — რაოდენობა'] || row.stock || row.C);
-
-      if (price === null) { errors.push({ row: i+2, sku, error: 'ფასი არასწორია' }); return null; }
-
-      // E სვეტი — ბრენდი (თუ მითითებულია, პრიორიტეტი აქვს extractBrand-ზე)
-      const brandFromE = String(row['E — ბრენდი'] || row.brand || row.Brand || row.E || '').trim();
-      const brand = brandFromE || extractBrand(nameKa);
-
-      return {
-        sku, nameKa,
-        nameEn: nameKa,
-        nameRu: nameKa,
-        price, stock,
-        brand,
-        oemCodes: oemCodes.length ? oemCodes : undefined,
-        alternativeSearchKeys: oemCodes.length ? oemCodes : undefined,
-      };
-    }).filter(Boolean);
+    const { processFinaExcel } = require('../services/finaImportEngine');
+    const markup = parseFloat(req.body.markup || '0') || 0;
+    const { normalized, rejected, errors, reviewQueue } = await processFinaExcel(req.file.buffer, { markup });
 
     // bulk fetch existing SKUs
     const skus = normalized.map(r => r.sku);
@@ -331,9 +280,13 @@ adminRouter.post('/products/import', upload.single('file'), async (req, res) => 
 
     // create import batch record (always — even if only updates)
     const totalCount = toCreate.length + toUpdate.length;
+    const rejectedReport = rejected.length ? JSON.stringify(rejected.map(r => ({
+      sku: r.sku, nameKa: r.nameKa, oemCodes: r.oemCodes, crossCodes: r.crossCodes,
+      confidence: r.confidence, method: r.method, reason: r.reason,
+    }))) : null;
     const batchResult = await prisma.$queryRaw`
-      INSERT INTO import_batches (filename, product_count, imported_by)
-      VALUES (${req.file.originalname || 'excel_import'}, ${totalCount}, 'admin')
+      INSERT INTO import_batches (filename, product_count, imported_by, rejected_report, rejected_count)
+      VALUES (${req.file.originalname || 'excel_import'}, ${totalCount}, 'admin', ${rejectedReport}, ${rejected.length})
       RETURNING id
     `;
     const batchId = batchResult[0]?.id || null;
@@ -364,8 +317,27 @@ adminRouter.post('/products/import', upload.single('file'), async (req, res) => 
     // cache გავწმინდოთ
     try { if (cache && cache.flush) await cache.flush('search:*'); } catch(e) { console.log('cache flush skip'); }
 
-    res.json({ added, updated, errors, total: rows.length });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+    const autoMatched = normalized.filter(r => r.autodocCategoryId && !reviewQueue.find(q => q.sku === r.sku)).length;
+    const reviewCount = reviewQueue.length;
+    const unknown = normalized.filter(r => !r.autodocCategoryId).length;
+    const accuracy = normalized.length > 0 ? Math.round((autoMatched / normalized.length) * 100) : 0;
+
+    res.json({
+      added, updated, errors,
+      total: normalized.length + rejected.length + errors.length,
+      batchId,
+      rejected: rejected.length,
+      rejectedReportUrl: (rejected.length && batchId) ? `/api/admin/import-batches/${batchId}/rejected-report` : null,
+      report: {
+        total: normalized.length,
+        autoMatched,
+        review: reviewCount,
+        unknown,
+        accuracy: accuracy + '%'
+      },
+      reviewQueue
+    });
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 module.exports = { deliveryRouter, adminRouter, finaRouter };
@@ -389,7 +361,7 @@ adminRouter.post('/upload-image', uploadImg.single('image'), async (req, res) =>
       stream.end(req.file.buffer);
     });
     res.json({ url: result.secure_url });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // POST /api/admin/fina-import
@@ -451,63 +423,159 @@ adminRouter.post('/fina-import', async (req, res) => {
       results.push({ name: file.name, added, updated });
     }
     res.json({ success: true, results });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
-// POST /api/admin/fina-import-upload
+// POST /api/admin/fina-import-upload — 100%-Gate + ასინქრონული (Cloudflare 100წ timeout-ის გვერდის ავლით)
 const uploadFina = multer({ storage: multer.memoryStorage(), limits: { fileSize: 104857600 } });
-adminRouter.post('/fina-import-upload', uploadFina.fields([{name:'tamazuka'},{name:'kakha'}]), async (req, res) => {
+
+async function __finaNotifyTelegram(text) {
   try {
-    const XLSX = require('xlsx');
-    const results = [];
-    const files = [
-      { key: 'tamazuka', name: 'თამაზუკა' },
-      { key: 'kakha',    name: 'კახაბერი' },
-    ];
-    for (const f of files) {
-      const uploaded = req.files?.[f.key]?.[0];
-      if (!uploaded) { results.push({ name: f.name, error: 'ფაილი არ აირჩიე' }); continue; }
-      const wb = XLSX.read(uploaded.buffer, { type: 'buffer' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const all = XLSX.utils.sheet_to_json(ws, { header: 1 });
-      const hi = all.findIndex(r => r && r.includes('კოდი'));
-      if (hi === -1) { results.push({ name: f.name, error: 'FINA ფორმატი არ არის' }); continue; }
-      const h = all[hi];
-      const si = h.indexOf('კოდი');
-      const ni = h.indexOf('დასახელება');
-      const sti = h.indexOf('საბოლოო ნაშთი');
-      const pi = h.findIndex(x => x && String(x) === 'ერთეულის ფასი');
-      // create batch record for this file
-      const safeFilename = Buffer.from(uploaded.originalname || f.name, 'latin1').toString('utf-8');
+    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8905815997:AAEmJshz49xjpUqmFPryLGGXPSmB6XSiDW8';
+    const CHAT_ID = process.env.TELEGRAM_CHAT_ID || '1867994078';
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: 'HTML' }),
+    });
+  } catch (e) { console.error('[fina-import-upload telegram]', e.message); }
+}
+
+async function __runFinaImportBackground(fileInputs) {
+  const { processFinaExcel } = require('../services/finaImportEngine');
+  const results = [];
+  for (const f of fileInputs) {
+    if (!f.buffer) { results.push({ name: f.name, error: 'ფაილი არ აირჩიე' }); continue; }
+    try {
+      const { normalized, rejected, errors } = await processFinaExcel(f.buffer, { markup: 0 });
+      if (!normalized.length && !rejected.length && errors.length) {
+        results.push({ name: f.name, error: errors[0].error });
+        continue;
+      }
+      const rejectedReport = rejected.length ? JSON.stringify(rejected.map(r => ({
+        sku: r.sku, nameKa: r.nameKa, oemCodes: r.oemCodes, crossCodes: r.crossCodes,
+        confidence: r.confidence, method: r.method, reason: r.reason,
+      }))) : null;
       const batchRes = await prisma.$queryRaw`
-        INSERT INTO import_batches (filename, product_count, imported_by)
-        VALUES (${safeFilename}, 0, 'admin')
+        INSERT INTO import_batches (filename, product_count, imported_by, rejected_report, rejected_count)
+        VALUES (${f.originalname}, ${normalized.length}, 'admin', ${rejectedReport}, ${rejected.length})
         RETURNING id
       `;
       const batchId = batchRes[0]?.id || null;
       let added = 0, updated = 0;
-      for (let i = hi + 1; i < all.length; i++) {
-        const r = all[i];
-        if (!r || !r[si]) continue;
-        const sku = String(r[si]).trim();
-        const nameKa = String(r[ni]).trim();
-        const price = parseFloat(r[pi] || 0);
-        const stock = parseInt(r[sti] || 0);
-        if (!sku || !nameKa) continue;
-        const ex = await prisma.product.findFirst({ where: { sku } });
+      for (const row of normalized) {
+        const ex = await prisma.product.findFirst({ where: { sku: row.sku } });
+        const price = row.price;
         const b2bPrice = price >= 500 ? parseFloat((price * 0.85).toFixed(2)) : parseFloat((price * 0.90).toFixed(2));
+        const data = {
+          nameKa: row.nameKa, nameEn: row.nameEn, nameRu: row.nameRu,
+          price, stock: row.stock, b2bPrice, brand: row.brand || 'Generic',
+          autodocCategoryId: row.autodocCategoryId || null,
+          categoryConfidence: row.categoryConfidence || null,
+          categoryMethod: row.categoryMethod || null,
+          ...(row.oemCodes?.length ? { oemCodes: row.oemCodes, alternativeSearchKeys: row.alternativeSearchKeys } : {}),
+        };
         if (ex) {
-          await prisma.product.update({ where: { id: ex.id }, data: { nameKa, price, stock, b2bPrice } });
+          await prisma.product.update({ where: { id: ex.id }, data });
           await prisma.$queryRawUnsafe('UPDATE products SET import_batch_id=$1 WHERE id=$2', batchId, ex.id);
           updated++;
         } else {
-          const created = await prisma.product.create({ data: { sku, nameKa, nameEn: nameKa, nameRu: nameKa, price, stock, b2bPrice, brand: 'Generic', isActive: true } });
+          const created = await prisma.product.create({ data: { sku: row.sku, isActive: true, ...data } });
           await prisma.$queryRawUnsafe('UPDATE products SET import_batch_id=$1 WHERE id=$2', batchId, created.id);
           added++;
         }
       }
-      results.push({ name: f.name, added, updated });
+      results.push({ name: f.name, added, updated, rejected: rejected.length, batchId });
+    } catch (e) {
+      console.error('[fina-import-upload background]', f.name, e);
+      results.push({ name: f.name, error: e.message });
     }
-    res.json({ success: true, results });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  }
+  const summary = results.map(r => r.error
+    ? `❌ ${r.name}: ${r.error}`
+    : `✅ ${r.name}: დამატებული ${r.added}, განახლებული ${r.updated}, rejected ${r.rejected}${r.batchId ? ` (batch #${r.batchId})` : ''}`
+  ).join('\n');
+  await __finaNotifyTelegram(`📂 <b>FINA Import დასრულდა</b>\n\n${summary}`);
+  console.log('[fina-import-upload] background job finished:', JSON.stringify(results));
+  return results;
+}
+
+let __finaImportJobStatus = { status: 'idle', startedAt: null, fileNames: [], result: null };
+
+// GET /api/admin/fina-import-status — ცოცხალი სტატუსი frontend-ის polling-ისთვის
+adminRouter.get('/fina-import-status', authenticate, requireAdmin, (req, res) => {
+  const elapsedSec = __finaImportJobStatus.startedAt
+    ? Math.round((Date.now() - __finaImportJobStatus.startedAt) / 1000) : null;
+  res.json({ ...__finaImportJobStatus, elapsedSec });
+});
+
+adminRouter.post('/fina-import-upload', uploadFina.fields([{name:'tamazuka'},{name:'kakha'}]), async (req, res) => {
+  try {
+    const fileInputs = [
+      { key: 'tamazuka', name: 'თამაზუკა' },
+      { key: 'kakha',    name: 'კახაბერი' },
+    ].map(f => {
+      const uploaded = req.files?.[f.key]?.[0];
+      return {
+        name: f.name,
+        buffer: uploaded ? uploaded.buffer : null,
+        originalname: uploaded ? Buffer.from(uploaded.originalname || f.name, 'latin1').toString('utf-8') : f.name,
+      };
+    });
+
+    if (!fileInputs.some(f => f.buffer)) {
+      return res.json({ success: true, results: fileInputs.map(f => ({ name: f.name, error: 'ფაილი არ აირჩიე' })) });
+    }
+
+    if (__finaImportJobStatus.status === 'processing') {
+      const elapsedSec = Math.round((Date.now() - __finaImportJobStatus.startedAt) / 1000);
+      return res.json({
+        success: false,
+        status: 'already_processing',
+        message: `Import უკვე მუშაობს (დაწყებული ${Math.floor(elapsedSec/60)} წუთის წინ) — მოითმინეთ დასრულებას, ხელახლა არ ატვირთოთ`,
+        elapsedSec,
+      });
+    }
+
+    __finaImportJobStatus = { status: 'processing', startedAt: Date.now(), fileNames: fileInputs.filter(f=>f.buffer).map(f=>f.originalname), result: null };
+
+    res.json({
+      success: true,
+      status: 'processing',
+      message: 'Import დაწყებულია ფონურ რეჟიმში — შედეგებს Telegram-ზე მიხვდებით რამდენიმე წუთში',
+    });
+
+    __runFinaImportBackground(fileInputs)
+      .then(results => { __finaImportJobStatus = { status: 'idle', startedAt: null, fileNames: [], result: results }; })
+      .catch(e => {
+        console.error('[fina-import-upload background fatal]', e);
+        __finaImportJobStatus = { status: 'idle', startedAt: null, fileNames: [], result: [{ error: e.message }] };
+      });
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
+});
+
+// POST /api/misc/price-request
+deliveryRouter.post('/price-request', async (req, res) => {
+  const { name, phone, product, productId, sku } = req.body;
+  if (!phone) return res.status(400).json({ error: 'phone required' });
+  try {
+    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8905815997:AAEmJshz49xjpUqmFPryLGGXPSmB6XSiDW8';
+    const CHAT_ID = process.env.TELEGRAM_CHAT_ID || '1867994078';
+    const text = `💰 ფასის მოთხოვნა\n\n👤 სახელი: ${name || '—'}\n📞 ტელეფონი: ${phone}\n🔩 ნაწილი: ${product || '—'}\n🔗 ${productId ? 'https://kibilov.ge/products/' + productId : '—'}\n📋 SKU: ${sku || '—'}`;
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: 'HTML' })
+    });
+    res.json({ ok: true });
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
+});
+
+adminRouter.get('/categories-export', async (req, res) => {
+  try {
+    const { generate } = require('../services/gen_template');
+    const buf = await generate(res);
+    res.setHeader('Content-Disposition', 'attachment; filename=kibilov_import.xlsx');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
+  } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });

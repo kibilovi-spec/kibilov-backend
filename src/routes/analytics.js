@@ -23,9 +23,7 @@ router.get('/search', async (req, res) => {
       },
       topQueries, topBrands, topParts, daily,
     });
-  } catch(e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { console.error('[analytics.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 router.post('/click', async (req, res) => {

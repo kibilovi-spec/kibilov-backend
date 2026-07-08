@@ -1,11 +1,11 @@
 'use strict';
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireAdmin, requireStaffOrAdmin } = require('../middleware/auth');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-router.use(authenticate, requireAdmin);
+router.use(authenticate, requireStaffOrAdmin);
 
 // AuditLog helper
 async function auditLog(userId, action, target, newValue, req) {
@@ -33,7 +33,7 @@ router.get('/dashboard2', async (req, res) => {
         prisma.searchLog.count({ where: { resultCount: 0 } }),
       ]);
     res.json({ metrics: { retail, b2b, pendingB2b }, alerts: { workQueue, zeroResults } });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Work Queue ────────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ router.get('/work-queue', async (req, res) => {
       }),
     ]);
     res.json({ queue, zeroResults });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 router.patch('/work-queue/:id', async (req, res) => {
@@ -69,7 +69,7 @@ router.patch('/work-queue/:id', async (req, res) => {
     });
     await auditLog(req.user.id, 'PRODUCT_SYNC_STATUS_UPDATE', req.params.id, { syncStatus }, req);
     res.json(product);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Price Change Panel ────────────────────────────────────────────────────
@@ -90,10 +90,10 @@ router.get('/price-changes', async (req, res) => {
       grouped[brand].push(item);
     }
     res.json({ grouped });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
-router.post('/price-changes/bulk', async (req, res) => {
+router.post('/price-changes/bulk', requireAdmin, async (req, res) => {
   try {
     const { brand, action } = req.body;
     await prisma.priceChangeLog.updateMany({
@@ -114,7 +114,7 @@ router.post('/price-changes/bulk', async (req, res) => {
     }
     await auditLog(req.user.id, `PRICE_HOLD_${action}`, brand, { brand, action }, req);
     res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── B2B Requests ──────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ router.get('/b2b/requests', async (req, res) => {
           'OK',
       })),
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 router.patch('/b2b/requests/:id', async (req, res) => {
@@ -153,7 +153,7 @@ router.patch('/b2b/requests/:id', async (req, res) => {
     const user = await prisma.user.update({ where: { id: req.params.id }, data });
     await auditLog(req.user.id, `B2B_${action}`, req.params.id, { action, tier }, req);
     res.json(user);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── AuditLog ──────────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ router.get('/audit-logs', async (req, res) => {
       take: parseInt(limit),
     });
     res.json(logs);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Partner Garage ────────────────────────────────────────────────────────
@@ -179,7 +179,7 @@ router.patch('/garages/:id', async (req, res) => {
     });
     await auditLog(req.user.id, 'GARAGE_PARTNER_TOGGLE', req.params.id, { isPartnerGarage, garageCity }, req);
     res.json(user);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 
@@ -240,9 +240,7 @@ router.get('/search-analytics', async (req, res) => {
       stats: stats[0] ? {...stats[0], total_searches: Number(stats[0].total_searches), successful: Number(stats[0].successful)} : {},
       daily: daily.map(d => ({...d, searches: Number(d.searches), successful: Number(d.successful)}))
     });
-  } catch(e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 
@@ -272,7 +270,7 @@ router.get('/oem-gaps', async (req, res) => {
       byCategory: byCategory.map(r => ({ ...r, total: Number(r.total), missing_oem: Number(r.missing_oem) })),
       topMissing
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Vehicle Coverage Dashboard ───────────────────────────────────────────────
@@ -305,7 +303,7 @@ router.get('/vehicle-coverage', async (req, res) => {
       vinSearches: vinSearches.map(r => ({...r, searches: Number(r.searches)})),
       totalVehicles: await prisma.$queryRaw`SELECT COUNT(DISTINCT vehicle_id) as cnt FROM vehicle_oem`.then(r => Number(r[0]?.cnt || 0))
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Search Failures Panel ────────────────────────────────────────────────────
@@ -341,7 +339,7 @@ router.get('/search-failures', async (req, res) => {
       } : {},
       trending: trending.map(r => ({...r, cnt: Number(r.cnt)}))
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Inventory Intelligence ───────────────────────────────────────────────────
@@ -394,7 +392,7 @@ router.get('/inventory', async (req, res) => {
         inStock: Number(stats[0].in_stock)
       } : {}
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 
@@ -430,7 +428,7 @@ router.get('/funnel', async (req, res) => {
       cartAbandon: cartUsers > 0 ? (((cartUsers - totalOrders) / cartUsers) * 100).toFixed(1) : 0,
       orderConv: totalUsers > 0 ? ((totalOrders / totalUsers) * 100).toFixed(1) : 0,
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── System Observability ──────────────────────────────────────────────────────
@@ -464,7 +462,7 @@ router.get('/system', async (req, res) => {
       env: process.env.NODE_ENV,
       ts: new Date().toISOString(),
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Demand Forecast ───────────────────────────────────────────────────────────
@@ -495,7 +493,7 @@ router.get('/forecast', async (req, res) => {
       lowStockHighDemand: lowStockHighDemand.map(r => ({...r, search_count: Number(r.search_count)})),
       categoryDemand: categoryDemand.map(r => ({...r, searches: Number(r.searches)})),
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Supplier Sync Status ──────────────────────────────────────────────────────
@@ -517,14 +515,14 @@ router.get('/sync', async (req, res) => {
       autodoc: { status: 'ok', plan: 'Pro', requests: '~20,000/month' },
       redis: { status: 'ok', caches: ['VIN', 'search', 'compatibility'] },
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/admin/import-batches
 router.get('/import-batches', requireAdmin, async (req, res) => {
   try {
     const batches = await prisma.$queryRaw`
-      SELECT id, filename, imported_at, product_count, imported_by
+      SELECT id, filename, imported_at, product_count, imported_by, rejected_count
       FROM import_batches ORDER BY imported_at DESC LIMIT 20
     `;
     const nullCount = await prisma.$queryRaw`
@@ -536,6 +534,8 @@ router.get('/import-batches', requireAdmin, async (req, res) => {
       importedAt: b.imported_at,
       productCount: Number(b.product_count || 0),
       importedBy: b.imported_by,
+      rejectedCount: Number(b.rejected_count || 0),
+      rejectedReportUrl: Number(b.rejected_count || 0) > 0 ? `/api/admin/import-batches/${Number(b.id)}/rejected-report` : null,
     }));
     if (Number(nullCount[0].cnt) > 0) {
       result.push({
@@ -547,7 +547,7 @@ router.get('/import-batches', requireAdmin, async (req, res) => {
       });
     }
     res.json(result);
-  } catch(e) { res.status(500).json({error: e.message}); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // DELETE /api/admin/import-batches/:id
@@ -557,7 +557,7 @@ router.delete('/import-batches/:id', requireAdmin, async (req, res) => {
     // products-ს import_batch_id null-ზე დაუყენებს ON DELETE SET NULL
     await prisma.$executeRaw`DELETE FROM import_batches WHERE id = ${id}`;
     res.json({ success: true });
-  } catch(e) { res.status(500).json({error: e.message}); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 
@@ -663,11 +663,11 @@ router.patch('/products/:id/images', async (req, res) => {
       data: { images: images.slice(0, 5) },
     });
     res.json({ ok: true, images });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // PATCH /api/admin/users/:id/b2b
-router.patch('/users/:id/b2b', async (req, res) => {
+router.patch('/users/:id/b2b', requireAdmin, async (req, res) => {
   try {
     const { PrismaClient } = require('@prisma/client');
     const prisma = new PrismaClient();
@@ -677,7 +677,38 @@ router.patch('/users/:id/b2b', async (req, res) => {
       data: { b2bStatus, b2bDiscount: parseInt(b2bDiscount)||0, b2bTier },
     });
     res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
+});
+
+// PATCH /admin/products/:id/pricing
+router.patch('/products/:id/pricing', requireAdmin, async (req, res) => {
+  try {
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    const { wholesalePrice, dealerPrice, discount } = req.body;
+    const data = {};
+    if (wholesalePrice !== undefined) data.wholesalePrice = parseFloat(wholesalePrice) || null;
+    if (dealerPrice !== undefined) data.dealerPrice = parseFloat(dealerPrice) || null;
+    if (discount !== undefined) data.discount = parseInt(discount) || 0;
+    await prisma.product.update({ where: { id: req.params.id }, data });
+    await prisma.$disconnect();
+    res.json({ ok: true });
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
+});
+
+// PATCH /admin/users/:id/role
+router.patch('/users/:id/role', requireAdmin, async (req, res) => {
+  try {
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    const { role } = req.body;
+    if (!['USER','ADMIN','WHOLESALE','DEALER'].includes(role)) {
+      return res.status(400).json({ error: 'invalid role' });
+    }
+    await prisma.user.update({ where: { id: req.params.id }, data: { role } });
+    await prisma.$disconnect();
+    res.json({ ok: true });
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Search Quality Dashboard ──────────────────────────────────────────────────
@@ -746,7 +777,7 @@ router.get('/search-quality', async (req, res) => {
       topFailed: topFailed.map(r => ({...r, cnt: Number(r.cnt)})),
       topSuccess: topSuccess.map(r => ({...r, cnt: Number(r.cnt), avg_results: Number(r.avg_results)}))
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Daily Visitors endpoint ───────────────────────────────────────────────────
@@ -757,7 +788,7 @@ router.get('/daily-visitors', async (req, res) => {
     const [todayVisitors, weekVisitors, todaySearches, totalOrders] = await Promise.all([
       prisma.$queryRaw`SELECT COUNT(DISTINCT session_id) as cnt FROM site_visits WHERE created_at >= ${today} AND created_at < ${tomorrow}`,
       prisma.$queryRaw`SELECT COUNT(DISTINCT session_id) as cnt FROM site_visits WHERE created_at >= ${new Date(Date.now()-7*86400000)}`,
-      prisma.$queryRaw`SELECT COUNT(*) as cnt FROM search_knowledge WHERE created_at >= ${today}`,
+      prisma.$queryRaw`SELECT COUNT(*) as cnt FROM search_analytics WHERE created_at >= ${today}`,
       prisma.order.count({ where: { createdAt: { gte: today } } }),
     ]);
     // daily chart (last 7 days)
@@ -774,5 +805,41 @@ router.get('/daily-visitors', async (req, res) => {
       todayOrders: totalOrders,
       chart: chart.map(r => ({ date: r.date, visitors: Number(r.visitors) }))
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
+});
+
+// GET /api/admin/review-queue
+router.get('/review-queue', async (req, res) => {
+  try {
+    const queue = await prisma.$queryRaw`
+      SELECT p.id, p.sku, p."nameKa", p."categoryId",
+             p."categoryConfidence", p."categoryMethod",
+             ac.name_ka as category_name, ac.name_en as category_name_en
+      FROM products p
+      LEFT JOIN autodoc_categories ac ON ac.autodoc_id::text = p."categoryId"
+      WHERE p."categoryId" IS NULL
+         OR (p."categoryConfidence" IS NOT NULL AND p."categoryConfidence" < 90)
+      ORDER BY p."categoryConfidence" ASC NULLS FIRST
+      LIMIT 100
+    `;
+    res.json({ success: true, queue });
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
+});
+
+// POST /api/admin/review-queue/confirm
+router.post('/review-queue/confirm', async (req, res) => {
+  try {
+    const { productId, categoryId } = req.body;
+    if (!productId || !categoryId) return res.status(400).json({ error: 'productId და categoryId საჭიროა' });
+
+    const product = await prisma.product.update({
+      where: { id: productId },
+      data: { autodocCategoryId: categoryId }
+    });
+
+    const { learnAlias } = require('../services/categoryMatcher');
+    await learnAlias(product.nameKa, categoryId, 'admin_confirmed');
+
+    res.json({ success: true });
+  } catch(e) { console.error('[admin2.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });

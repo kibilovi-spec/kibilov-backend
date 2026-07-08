@@ -57,6 +57,19 @@ async function autodocSearchByPart(brand, partEn) {
 }
 
 const Anthropic = require('@anthropic-ai/sdk');
+// მარტივი in-memory cache Autodoc fallback-ისთვის (TTL: 1 საათი)
+const _autodocFallbackCache = new Map();
+const AUTODOC_FALLBACK_CACHE_TTL_MS = 60 * 60 * 1000;
+function getFallbackCache(key) {
+  const hit = _autodocFallbackCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.ts > AUTODOC_FALLBACK_CACHE_TTL_MS) { _autodocFallbackCache.delete(key); return null; }
+  return hit.data;
+}
+function setFallbackCache(key, data) {
+  _autodocFallbackCache.set(key, { data, ts: Date.now() });
+  if (_autodocFallbackCache.size > 500) { const firstKey = _autodocFallbackCache.keys().next().value; _autodocFallbackCache.delete(firstKey); }
+}
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -1056,6 +1069,7 @@ router.post('/chat', async (req, res) => {
 
     // "ვერ ვიპოვე" — წინადადებები
     let suggestions = [];
+    const _q = message || '';
     // cross reference fallback — Autodoc API
     if (scored.length === 0) {
       try {
@@ -1232,6 +1246,73 @@ router.post('/chat', async (req, res) => {
       if (!parsed.brand || !parsed.model) { confidence -= 20; fitmentRisk = 'high'; }
       confidence = Math.max(30, Math.min(99, confidence));
     }
+    // === AUTODOC FALLBACK — თუ ჩვენს ბაზაში 0 პროდუქტია, ვცდით Autodoc-ის ცოცხალ კატალოგს ===
+    let autodocFallback = null;
+    if (scored.length === 0 && parsed.brand && parsed.model && (parsed.part_en || parsed.part_ka)) {
+      try {
+        const mapping = require('../services/categoryMapping');
+        const mapKeys = Object.keys(mapping);
+        const target = (parsed.part_en || '').toLowerCase();
+        const targetWords = target.split(/\s+/).filter(Boolean);
+        // 1. ჯერ ვცდით ზუსტ დამთხვევას (singular/plural ვარიაციების ჩათვლით)
+        let bestKey = mapKeys.find(k => k.toLowerCase() === target || k.toLowerCase() === target + 's' || k.toLowerCase().replace(/s$/,'') === target.replace(/s$/,''));
+        if (!bestKey) {
+          // 2. fuzzy: ყველა საკმარისი overlap-ის მქონე key შევკრიბოთ, შემდეგ ავირჩიოთ ყველაზე მოკლე (ყველაზე ზოგადი) მათგან
+          let bestScore = 0;
+          let candidates = [];
+          for (const key of mapKeys) {
+            const keyLower = key.toLowerCase();
+            const keyWords = keyLower.split(/\s+/).filter(Boolean);
+            const overlap = targetWords.filter(w => keyWords.some(kw => kw.includes(w) || w.includes(kw))).length;
+            if (overlap > bestScore) { bestScore = overlap; candidates = [key]; }
+            else if (overlap === bestScore && overlap > 0) { candidates.push(key); }
+          }
+          if (candidates.length > 0) {
+            candidates.sort((a, b) => a.length - b.length);
+            bestKey = candidates[0];
+          }
+        }
+        if (bestKey) {
+          const cacheKey = `${parsed.brand}|${parsed.model}|${parsed.year||'2015'}|${bestKey}`.toLowerCase();
+          let fbData = getFallbackCache(cacheKey);
+          // ჯერ ლოკალურად უკვე მოპოვებულ reference-მონაცემში ვცდით (სწრაფი, quota-ს არ ხარჯავს)
+          if (!fbData) {
+            try {
+              const { PrismaClient: PrismaLocalRef } = require('@prisma/client');
+              const prismaLocalRef = new PrismaLocalRef();
+              const localRows = await prismaLocalRef.$queryRaw`
+                SELECT brand, article_code, description, image_url FROM autodoc_reference_data
+                WHERE category_en = ${bestKey} AND (make ILIKE ${'%'+parsed.brand+'%'} OR model ILIKE ${'%'+parsed.model+'%'})
+                LIMIT 8
+              `;
+              await prismaLocalRef.$disconnect();
+              if (localRows.length > 0) {
+                fbData = { found: true, articles: localRows.map(r => ({ brand: r.brand, code: r.article_code, desc: r.description, image: r.image_url })) };
+              }
+            } catch (locErr) {}
+          }
+          if (!fbData) {
+            const fbUrl = `http://localhost:${process.env.PORT || 3001}/api/autodoc/byCategoryName?make=${encodeURIComponent(parsed.brand)}&model=${encodeURIComponent(parsed.model)}&year=${encodeURIComponent(parsed.year || '2015')}&categoryEn=${encodeURIComponent(bestKey)}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            try {
+              const fbResp = await fetch(fbUrl, { signal: controller.signal });
+              fbData = await fbResp.json();
+              setFallbackCache(cacheKey, fbData);
+            } finally { clearTimeout(timeoutId); }
+          }
+          if (fbData.found && fbData.articles?.length > 0) {
+            autodocFallback = {
+              available: true,
+              matchedCategory: bestKey,
+              note: 'ჩვენს მარაგში ამჟამად არ არის, მაგრამ შესაძლებელია შეკვეთით მიწოდება',
+              articles: fbData.articles.slice(0, 8)
+            };
+          }
+        }
+      } catch (fbErr) { console.error('[AI autodoc fallback error]', fbErr.message); }
+    }
+
     // Insert into search_analytics and get analyticsId
     let analyticsId = null;
     try {
@@ -1239,13 +1320,13 @@ router.post('/chat', async (req, res) => {
       // search_type detection
       const sType = parsed.vin ? 'vin' : /^[A-Z0-9\-\.\s]{4,20}$/.test(_q.trim()) && !parsed.brand ? 'oem' : parsed.brand ? 'keyword' : 'keyword';
       const rows = await prisma.$queryRaw`
-        INSERT INTO search_analytics (query, brand, model, year, part_ka, results_count, clicked, cart_added, purchased, search_type)
-        VALUES (${_q}, ${parsed.brand||null}, ${parsed.model||null}, ${parsed.year?String(parsed.year):null}, ${parsed.part_ka||_q}, ${scored.length}, false, false, false, ${sType})
+        INSERT INTO search_analytics (query, brand, model, year, part_ka, results_count, clicked, cart_added, purchased, search_type, autodoc_fallback_shown, autodoc_fallback_category)
+        VALUES (${_q}, ${parsed.brand||null}, ${parsed.model||null}, ${parsed.year?String(parsed.year):null}, ${parsed.part_ka||_q}, ${scored.length}, false, false, false, ${sType}, ${!!autodocFallback}, ${autodocFallback?.matchedCategory||null})
         RETURNING id
       `;
       analyticsId = rows?.[0]?.id ?? null;
     } catch(e) { console.error('analytics INSERT error:', e.message); }
-    res.json({ parsed, products: scored, count: scored.length, suggestions, yearMismatchNote, referenceData, _explanation: _explanation || null, relatedParts, confidence, fitmentRisk, analyticsId });
+    res.json({ parsed, products: scored, count: scored.length, suggestions, yearMismatchNote, referenceData, _explanation: _explanation || null, relatedParts, confidence, fitmentRisk, analyticsId, autodocFallback });
   } catch (err) {
     console.error('AI chat error:', err);
     res.status(500).json({ error: err.message });

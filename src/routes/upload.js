@@ -5,7 +5,7 @@ const router = express.Router();
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5*1024*1024 } });
 
-router.post('/image', authenticate, requireAdmin, upload.single('file'), async (req, res) => {
+router.post('/image', authenticate, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'ფაილი საჭიროა' });
     const cloudinary = require('cloudinary').v2;
@@ -21,7 +21,7 @@ router.post('/image', authenticate, requireAdmin, upload.single('file'), async (
       ).end(req.file.buffer);
     });
     res.json({ success: true, url: result.secure_url });
-  } catch(e) { res.status(400).json({ error: e.message }); }
+  } catch(e) { console.error('[upload.js]', e); res.status(400).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 router.post('/sign', async (req, res) => {

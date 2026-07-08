@@ -13,7 +13,7 @@ router.get('/:productId', async (req, res) => {
     });
     const avg = reviews.length ? reviews.reduce((a,r) => a + r.rating, 0) / reviews.length : 0;
     res.json({ success: true, data: reviews, average: avg.toFixed(1), total: reviews.length });
-  } catch(e) { res.status(400).json({ error: e.message }); }
+  } catch(e) { console.error('[reviews.js]', e); res.status(400).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 router.post('/:productId', authenticate, async (req, res) => {
@@ -26,7 +26,7 @@ router.post('/:productId', authenticate, async (req, res) => {
       create: { productId: req.params.productId, userId: req.user.id, rating: parseInt(rating), comment }
     });
     res.json({ success: true, data: review });
-  } catch(e) { res.status(400).json({ error: e.message }); }
+  } catch(e) { console.error('[reviews.js]', e); res.status(400).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 router.delete('/:productId', authenticate, async (req, res) => {
@@ -35,7 +35,7 @@ router.delete('/:productId', authenticate, async (req, res) => {
       where: { productId_userId: { productId: req.params.productId, userId: req.user.id } }
     });
     res.json({ success: true });
-  } catch(e) { res.status(400).json({ error: e.message }); }
+  } catch(e) { console.error('[reviews.js]', e); res.status(400).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 module.exports = router;

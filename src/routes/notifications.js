@@ -21,7 +21,7 @@ router.post('/subscribe', authenticate, async (req, res) => {
     const { subscription } = req.body;
     if (!subscription) return res.status(400).json({ error: 'subscription required' });
     res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[notifications.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 router.post('/send', authenticate, async (req, res) => {
@@ -31,7 +31,7 @@ router.post('/send', authenticate, async (req, res) => {
     const webpush = getWebPush();
     await webpush.sendNotification(JSON.parse(subscription), JSON.stringify({ title, body, url }));
     res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[notifications.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 module.exports = router;

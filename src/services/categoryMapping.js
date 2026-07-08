@@ -457,6 +457,6 @@ module.exports = {
 
   "Front Brake Pads": [100626],
   "Rear Brake Pads": [100627],
-  "Thermostat": [100089, 100090],
-  "Shock Absorbers": [100156, 100157, 100158]
+  "Thermostat": [100089, 100095, 100094],
+  "Shock Absorbers": [100121, 706395, 103897]
 };

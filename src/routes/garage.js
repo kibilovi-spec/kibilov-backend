@@ -13,8 +13,26 @@ router.get('/', authenticate, async (req, res) => {
       where: { userId: req.user.id },
       orderBy: [{ isMain: 'desc' }, { createdAt: 'desc' }]
     });
-    res.json({ success: true, data: vehicles });
-  } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+    // model image lookup
+    const enriched = await Promise.all(vehicles.map(async (v) => {
+      try {
+        const modelRow = await prisma.$queryRaw`
+          SELECT id FROM vehicle_models 
+          WHERE LOWER(name) = LOWER(${v.model}) 
+          LIMIT 1
+        `;
+        const modelId = modelRow?.[0]?.id;
+        return {
+          ...v,
+          modelId: modelId || null,
+          modelImageUrl: modelId 
+            ? 'https://fsn1.your-objectstorage.com/tecdoc2025/models/' + modelId + '.jpg'
+            : null,
+        };
+      } catch { return { ...v, modelId: null, modelImageUrl: null }; }
+    }));
+    res.json({ success: true, data: enriched });
+  } catch(e) { console.error('GARAGE ERROR:', e.message, e.stack?.split('\n')[1]); res.status(500).json({ success: false, message: e.message }); }
 });
 
 // POST /api/garage — მანქანის დამატება
@@ -23,7 +41,7 @@ router.post('/', authenticate, async (req, res) => {
     const { brand, model, year, engine, fuelType, vehicleId } = req.body;
     if (!brand) return res.status(400).json({ success: false, message: 'brand required' });
     if (!model) return res.status(400).json({ success: false, message: 'model required' });
-    if (!year)  return res.status(400).json({ success: false, message: 'year required' });
+    // year optional — model სახელში წლები ჩანს
 
     // პირველი მანქანა ავტომატურად მთავარია
     const existing = await prisma.userVehicle.count({ where: { userId: req.user.id } });
@@ -32,15 +50,15 @@ router.post('/', authenticate, async (req, res) => {
         userId: req.user.id,
         make: brand,
         model: model,
-        year: parseInt(year),
+        year: year ? parseInt(year) : null,
         engine: engine || null,
         fuelType: fuelType || null,
-        vehicle_id: vehicleId ? String(vehicleId) : null,
+        vehicleId: vehicleId ? String(vehicleId) : null,
         isMain: existing === 0,
       }
     });
     res.json({ success: true, data: vehicle });
-  } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+  } catch(e) { console.error('GARAGE POST ERROR:', e.message); res.status(500).json({ success: false, message: e.message }); }
 });
 
 // PATCH /api/garage/:id/main — მთავარ მანქანად დაყენება
@@ -96,3 +114,26 @@ router.delete('/:id', authenticate, async (req, res) => {
 });
 
 module.exports = router;
+
+// GET /api/garage/vehicle-categories/:vehicleId
+router.get('/vehicle-categories/:vehicleId', authenticate, async (req, res) => {
+  try {
+    const axios = require('axios');
+    const HEADERS = {
+      'x-rapidapi-key': process.env.RAPIDAPI_KEY,
+      'x-rapidapi-host': 'autodoc-parts-catalog.p.rapidapi.com',
+    };
+    const r = await axios.get(
+      `https://autodoc-parts-catalog.p.rapidapi.com/api/category/type-id/1/products-groups-variant-1/${req.params.vehicleId}/lang-id/4`,
+      { headers: HEADERS, timeout: 10000 }
+    );
+    const cats = r.data?.categories || [];
+    // top level კატეგორიები
+    const top = cats.filter(c => c.level === 1).map(c => ({
+      id: c.categoryId1,
+      name: c.categoryName1,
+    }));
+    const unique = Array.from(new Map(top.map(c => [c.id, c])).values());
+    res.json({ success: true, data: unique });
+  } catch(e) { res.json({ success: true, data: [] }); }
+});

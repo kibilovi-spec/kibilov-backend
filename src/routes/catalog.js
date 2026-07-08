@@ -31,7 +31,7 @@ router.get('/vehicles', async (req, res) => {
     }));
     await cache.set(cacheKey, result, 86400);
     res.json(result);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[catalog.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 router.get('/categories', async (req, res) => {
@@ -44,7 +44,7 @@ router.get('/categories', async (req, res) => {
     const data = await apiFetch(`${BASE_URL}/category/type-id/1/products-groups-variant-1/${vehicleId}/lang-id/4`);
     await cache.set(cacheKey, data, 86400);
     res.json(data);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[catalog.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 router.get('/parts', async (req, res) => {
@@ -57,7 +57,7 @@ router.get('/parts', async (req, res) => {
     const data = await apiFetch(`${BASE_URL}/articles/list/type-id/1/vehicle-id/${vehicleId}/category-id/${categoryId}/lang-id/4`);
     await cache.set(cacheKey, data, 3600);
     res.json(data);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[catalog.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 
@@ -73,7 +73,7 @@ router.get('/makes', async (req, res) => {
       .sort((a, b) => a.name.localeCompare(b.name));
     await cache.set(cacheKey, result, 86400);
     res.json(result);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[catalog.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/catalog/models?makeId=X
@@ -90,7 +90,7 @@ router.get('/models', async (req, res) => {
       .sort((a, b) => (a.name||'').localeCompare(b.name||''));
     await cache.set(cacheKey, result, 86400);
     res.json(result);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[catalog.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/catalog/years?modelId=X
@@ -111,7 +111,7 @@ router.get('/years', async (req, res) => {
     const years = [...yearsSet].sort((a, b) => b - a);
     await cache.set(cacheKey, years, 86400);
     res.json(years);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[catalog.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/catalog/engines?modelId=X&year=Y
@@ -129,7 +129,7 @@ router.get('/engines', async (req, res) => {
     const result = filtered.map(v => ({ id: v.vehicleId || v.id, name: v.typeEngineName || v.vehicleFullName || v.name, year: v.yearOfConstructionFrom }));
     await cache.set(cacheKey, result, 86400);
     res.json(result);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[catalog.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/catalog/resolve?make=Ford&model=Focus&year=2010
@@ -147,7 +147,7 @@ router.get('/resolve', async (req, res) => {
     const mod = (modData.models || []).find(m => (m.modelName||'').toLowerCase().includes(model.toLowerCase()));
     if (!mod) return res.json({ found: true, makeId: mfg.manufacturerId });
     return res.json({ found: true, makeId: mfg.manufacturerId, makeName: mfg.manufacturerName, modelId: mod.modelId, modelName: mod.modelName });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[catalog.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 module.exports = router;

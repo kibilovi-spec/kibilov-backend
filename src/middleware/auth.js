@@ -31,4 +31,20 @@ function optionalAuth(req, res, next) {
   next();
 }
 
-module.exports = { authenticate, requireAdmin, optionalAuth, prisma };
+function requireRole(...allowedRoles) {
+  return function(req, res, next) {
+    if (!req.user?.role || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'წვდომა აკრძალულია' });
+    }
+    next();
+  };
+}
+// STAFF-ს შეუძლია read-only admin გვერდების ნახვა, მაგრამ არა სენსიტიური ცვლილებები
+function requireStaffOrAdmin(req, res, next) {
+  if (!['ADMIN', 'STAFF'].includes(req.user?.role)) {
+    return res.status(403).json({ success: false, message: 'წვდომა აკრძალულია' });
+  }
+  next();
+}
+
+module.exports = { authenticate, requireAdmin, requireRole, requireStaffOrAdmin, optionalAuth, prisma };

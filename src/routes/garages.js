@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
       orderBy: { name: 'asc' },
     });
     res.json(garages);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[garages.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 module.exports = router;

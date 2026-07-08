@@ -9,7 +9,7 @@ router.use(authenticate);
 // POST /api/orders — checkout
 router.post('/', async (req, res) => {
   try {
-    const { address, deliveryZone, paymentMethod } = req.body;
+    const { address, deliveryZone, paymentMethod, phone, note } = req.body;
     const userId = req.user.id;
 
     // Get full user data
@@ -66,9 +66,10 @@ router.post('/', async (req, res) => {
           status: 'PENDING',
           addressId: addressRecord?.id || null,
           customerName: dbUser?.name || '',
-          customerPhone: dbUser?.phone || '',
+          customerPhone: phone || dbUser?.phone || '',
           customerEmail: dbUser?.email || '',
           deliveryAddress: address ? `${address.city}, ${address.street}${address.apartment ? ', ' + address.apartment : ''}` : '',
+          note: note || null,
           items: {
             create: cart.items.map(i => ({
               productId: i.productId,
@@ -118,7 +119,7 @@ router.post('/', async (req, res) => {
     // Email Invoice
     try {
       const { sendOrderInvoice } = require('../services/email');
-      await sendOrderInvoice(order, req.user);
+      await sendOrderInvoice(order, order.customerEmail);
     } catch (e) { console.error('Email error:', e.message); }
 
     res.status(201).json({ success: true, order });
@@ -262,9 +263,7 @@ router.get('/:id/pdf', async (req, res) => {
     doc.fontSize(12).text(`TOTAL: ${Number(order.total).toFixed(2)} GEL`, 380, y + 35);
 
     doc.end();
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { console.error('[orders.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/orders/:id/csv
@@ -287,7 +286,5 @@ router.get('/:id/csv', async (req, res) => {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename=order-${order.orderNumber}.csv`);
     res.send(csv);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { console.error('[orders.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });

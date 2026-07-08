@@ -73,9 +73,7 @@ router.get('/search', async (req, res) => {
     }
 
     res.json({ products, total, page: parseInt(page), limit: parseInt(limit) });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { console.error('[parts.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Fitment Search ────────────────────────────────────────────────────────
@@ -112,9 +110,7 @@ router.get('/fitment', async (req, res) => {
     }) : [];
 
     res.json({ fitments, oemCodes, products });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { console.error('[parts.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ── Zero Results Top ──────────────────────────────────────────────────────
@@ -128,9 +124,7 @@ router.get('/zero-results', async (req, res) => {
       take: 10,
     });
     res.json(top);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { console.error('[parts.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 module.exports = router;

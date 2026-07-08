@@ -37,6 +37,19 @@ router.get('/decode', async (req, res) => {
       vehicleId = await vinResolver.resolveVehicleId(resolved, prisma).catch(() => null);
     }
     await prisma.$disconnect();
+    // tecdoc_multi — რამდენიმე candidate, user-ს სია ვაჩვენოთ
+    if (resolved && resolved.source === 'tecdoc_multi') {
+      await prisma.$disconnect().catch(()=>{});
+      return res.json({
+        vehicle: null,
+        vehicleId: null,
+        multiMatch: true,
+        vehicles: resolved.vehicles || [],
+        confidence: 0,
+        confidenceLabel: '🔍 აირჩიეთ მანქანა',
+        confidenceColor: 'blue',
+      });
+    }
     if (!resolved || !resolved.make) throw new Error('VIN ვერ მოიძებნა');
     const vehicle = {
       make: resolved.make,
@@ -182,9 +195,7 @@ router.post('/batch', async (req, res) => {
     );
 
     res.json({ decoded, total: decoded.length });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { console.error('[vin.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // POST /api/vin/ocr — ფოტოდან VIN წაკითხვა
@@ -228,7 +239,5 @@ router.post('/ocr', async (req, res) => {
         res.status(500).json({ error: 'სურათის დამუშავება ვერ მოხერხდა: ' + e.message });
       }
     });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { console.error('[vin.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });

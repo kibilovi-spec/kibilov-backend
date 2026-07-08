@@ -26,7 +26,7 @@ router.post('/', async (req, res) => {
       });
     } catch(emailErr) { console.log('email error:', emailErr.message); }
     res.json({ success: true, id: lead.id });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[leads.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/leads (admin)
@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
   try {
     const leads = await prisma.lead.findMany({ orderBy: { createdAt: 'desc' }, take: 50 });
     res.json(leads);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[leads.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // PATCH /api/leads/:id
@@ -43,7 +43,7 @@ router.patch('/:id', async (req, res) => {
     const { status } = req.body;
     const lead = await prisma.lead.update({ where: { id: parseInt(req.params.id) }, data: { status } });
     res.json(lead);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[leads.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 module.exports = router;

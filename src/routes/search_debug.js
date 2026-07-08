@@ -76,9 +76,7 @@ router.get('/', async (req, res) => {
         vehicleFound: vehicleMatch.length > 0,
       }
     });
-  } catch(e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch(e) { console.error('[search_debug.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 module.exports = router;

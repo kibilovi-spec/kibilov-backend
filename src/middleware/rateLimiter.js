@@ -27,4 +27,5 @@ module.exports = {
   aiLimiter:       makeLimiter({ windowMs: 15*60*1000, max: 15,  prefix: 'ai' }),
   vinOcrLimiter:   makeLimiter({ windowMs: 15*60*1000, max: 15,  prefix: 'vinocr' }),
   vinBatchLimiter: makeLimiter({ windowMs: 60*60*1000, max: 10,  prefix: 'vinbatch' }),
+  uploadLimiter:   makeLimiter({ windowMs: 60*60*1000, max: 20,  prefix: 'upload' }),
 };

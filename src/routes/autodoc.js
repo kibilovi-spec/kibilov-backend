@@ -19,7 +19,7 @@ router.get('/oem', async (req, res) => {
     res.json({ found: arr.length > 0, oem: code, count: d.countArticles || arr.length,
       articles: arr.slice(0,20).map(a => ({ brand: a.supplierName||'', code: a.articleNo||'', desc: a.articleProductName||'', articleId: a.articleId, image: a.s3image||null })).filter(a=>a.code)
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/crossref?code=04465-33480
@@ -33,7 +33,7 @@ router.get('/crossref', async (req, res) => {
     res.json({ found: arr.length > 0, oem: code, count: d.countArticles || arr.length,
       articles: arr.slice(0,20).map(a => ({ brand: a.supplierName||'', code: a.articleNo||'', desc: a.articleProductName||'', articleId: a.articleId, image: a.s3image||null })).filter(a=>a.code)
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/vin?vin=WDBFA68F42F202731
@@ -44,28 +44,34 @@ router.get('/vin', async (req, res) => {
     const r = await fetch(`${BASE}/api/vin/decoder-v5/${encodeURIComponent(vin)}`, { headers: headers() });
     const d = await r.json();
     res.json({ vin, data: d });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/manufacturers
 router.get('/manufacturers', async (req, res) => {
+  const _manuCache = require('../services/cache');
+  const _manuCached = await _manuCache.get('autodoc:manufacturers');
+  if (_manuCached) return res.json(_manuCached);
   if (!RAPIDAPI_KEY) return res.status(500).json({ error: 'API not configured' });
   try {
     const r = await fetch(`${BASE}/api/manufacturers/list/type-id/1`, { headers: headers() });
     const d = await r.json();
     res.json({ manufacturers: d.manufacturers || d || [] });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/models?manufacturerId=111
 router.get('/models', async (req, res) => {
   const { manufacturerId } = req.query;
   if (!manufacturerId || !RAPIDAPI_KEY) return res.status(400).json({ error: 'manufacturerId required' });
+  const _modCache = require('../services/cache');
+  const _modCached = await _modCache.get(`autodoc:models:${manufacturerId}`);
+  if (_modCached) return res.json(_modCached);
   try {
     const r = await fetch(`${BASE}/api/models/list/type-id/1/manufacturer-id/${manufacturerId}/lang-id/4/country-filter-id/63`, { headers: headers() });
     const d = await r.json();
     res.json({ models: Array.isArray(d) ? d : [] });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/vehicles?modelId=5813
@@ -77,7 +83,7 @@ router.get('/vehicles', async (req, res) => {
     const d = await r.json();
     const vehicles = d.modelTypes || [];
     res.json({ vehicles });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/parts?vehicleId=20332&categoryId=100260
@@ -152,7 +158,7 @@ router.get('/parts', async (req, res) => {
       count: d.countArticles || articles.length,
       articles: deduped
     });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/search?make=toyota&part=oil+filter
@@ -169,7 +175,7 @@ router.get('/search', async (req, res) => {
     const partsD = await partsR.json();
     const arr = partsD.articles || [];
     res.json({ found: arr.length > 0, make, part, articles: arr.slice(0,10).map(a => ({ brand: a.supplierName||'', code: a.articleNo||'', desc: a.articleProductName||'' })) });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 
@@ -233,7 +239,7 @@ router.get('/categories', async (req, res) => {
     const cache2 = require('../services/cache');
     await cache2.set(cacheKey, responseBody, cache2.TTL.VEHICLE);
     res.json(responseBody);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/article?articleId=61981
@@ -244,7 +250,42 @@ router.get('/article', async (req, res) => {
     const r = await fetch(`${BASE}/api/articles/details/article-id/${articleId}/lang-id/4`, { headers: headers() });
     const d = await r.json();
     res.json({ articleId, detail: d });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
+});
+
+// GET /api/autodoc/article/:articleId — path param version (frontend uses this)
+router.get('/article/:articleId', async (req, res) => {
+  const articleId = req.params.articleId;
+  if (!articleId || !RAPIDAPI_KEY) return res.status(400).json({ error: 'articleId required' });
+  try {
+    const r = await fetch(`${BASE}/api/articles/details/article-id/${articleId}/lang-id/4`, { headers: headers() });
+    const d = await r.json();
+    if (!d || d.error) return res.status(404).json({ success: false, error: 'not found' });
+    const article = d.article || d;
+    const images = (d.images || []).map(i => i.imageURL || i.url || i).filter(i => typeof i === 'string');
+    const oemCodes = (d.oemNumbers || d.articleOemNumbers || []).map(o => o.oemNumber || o).filter(Boolean);
+    const attrs = (d.articleAllSpecifications || []).map(a => ({
+      name: a.criteriaName || '', value: a.criteriaValue || ''
+    }));
+    res.json({
+      success: true,
+      data: {
+        id: 'autodoc_' + articleId,
+        nameKa: article.articleProductName || '',
+        nameEn: article.articleProductName || '',
+        brand: article.supplierName || '',
+        sku: article.articleNo || '',
+        price: null,
+        stock: 1,
+        images: images,
+        source: 'autodoc',
+        autodocArticleId: parseInt(articleId),
+        attributes: attrs,
+        oemCodes: oemCodes,
+        descriptionEn: attrs.map(a => a.name + ': ' + a.value).join('\n'),
+      }
+    });
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/byCategory?vehicleId=20332&categoryEn=Oil+Filter
@@ -267,7 +308,7 @@ router.get('/byCategory', async (req, res) => {
     const seen = new Set();
     const unique = allArticles.filter(a => { if(seen.has(a.code)) return false; seen.add(a.code); return true; });
     res.json({ found: unique.length > 0, categoryEn, vehicleId, count: unique.length, articles: unique.slice(0, 20) });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/byCategoryName?make=toyota&model=camry&year=2008&categoryEn=Oil+Filter
@@ -322,13 +363,13 @@ router.get('/byCategoryName', async (req, res) => {
     for (const catId of autodocIds.slice(0, 3)) {
       const r = await fetch(`${BASE}/api/articles/list/type-id/1/vehicle-id/${vehicleId}/category-id/${catId}/lang-id/4`, { headers: headers() });
       const d = await r.json();
-      const arts = (d.articles || []).map(a => ({ brand: a.supplierName||'', code: a.articleNo||'', desc: a.articleProductName||'', image: a.s3image||null }));
+      const arts = (d.articles || []).map(a => ({ brand: a.supplierName||'', code: a.articleNo||'', desc: a.articleProductName||'', image: a.s3image||null, articleId: a.articleId||null }));
       allArticles.push(...arts);
     }
     const seen = new Set();
     const unique = allArticles.filter(a => { if(seen.has(a.code)) return false; seen.add(a.code); return true; });
     res.json({ found: unique.length > 0, make, model, year, categoryEn, vehicleId, count: unique.length, articles: unique.slice(0, 15) });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // POST /api/autodoc/checkCodes — check which OEM codes exist in our DB
@@ -359,7 +400,7 @@ router.post('/checkCodes', async (req, res) => {
     }
     await prisma.$disconnect();
     res.json({ found: results });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/crossref-and-check?articleNo=GDB3445
@@ -388,7 +429,7 @@ router.get('/crossref-and-check', async (req, res) => {
     }
     await prisma.$disconnect();
     res.json({ found: Object.keys(inStock).length > 0, total: d.countArticles, inStock });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/vin/check/:vin
@@ -398,7 +439,7 @@ router.get('/vin/check/:vin', async (req, res) => {
     const r = await fetch(`${BASE}/api/vin/tecdoc-vin-check/${req.params.vin}`, { headers: headers() });
     const d = await r.json();
     res.json(d);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/vin/decode/:vin
@@ -408,18 +449,21 @@ router.get('/vin/decode/:vin', async (req, res) => {
     const r = await fetch(`${BASE}/api/vin/decode-v3/${req.params.vin}`, { headers: headers() });
     const d = await r.json();
     res.json(d);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/manufacturers
 router.get('/manufacturers', async (req, res) => {
+  const _manuCache = require('../services/cache');
+  const _manuCached = await _manuCache.get('autodoc:manufacturers');
+  if (_manuCached) return res.json(_manuCached);
   const typeId = req.query.typeId || 1;
   if (!RAPIDAPI_KEY) return res.status(400).json({ error: 'RAPIDAPI_KEY missing' });
   try {
     const r = await fetch(`${BASE}/api/manufacturers/list/type-id/${typeId}`, { headers: headers() });
     const d = await r.json();
     res.json(d);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/models/:manuId
@@ -430,7 +474,7 @@ router.get('/models/:manuId', async (req, res) => {
     const r = await fetch(`${BASE}/api/models/list/type-id/${typeId}/manufacturer-id/${req.params.manuId}/lang-id/4/country-filter-id/63`, { headers: headers() });
     const d = await r.json();
     res.json(d);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/vehicle-ids/:modelId
@@ -440,7 +484,7 @@ router.get('/vehicle-ids/:modelId', async (req, res) => {
     const r = await fetch(`${BASE}/api/types/type-id/1/list-vehicles-id/${req.params.modelId}/lang-id/4/country-filter-id/63`, { headers: headers() });
     const d = await r.json();
     res.json(d);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/categories/:vehicleId
@@ -451,35 +495,39 @@ router.get('/categories/:vehicleId', async (req, res) => {
     const r = await fetch(`${BASE}/api/articles/list-categories-v3/type-id/${typeId}/vehicle-id/${req.params.vehicleId}/lang-id/${langId}`, { headers: headers() });
     const d = await r.json();
     res.json(d);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 
-// GET /api/autodoc/cross-refs?oem=xxx
+// GET /api/autodoc/cross-refs?oem=xxx&articleId=xxx
 router.get('/cross-refs', async (req, res) => {
-  const { oem } = req.query;
-  if (!oem) return res.status(400).json({ error: 'oem required', refs: [] });
+  const { oem, articleId } = req.query;
+  if (!oem && !articleId) return res.status(400).json({ error: 'oem or articleId required', refs: [] });
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-    const cleanOem = oem.replace(/[\s\-\.]/g,'').toUpperCase();
-    const dbRefs = await prisma.$queryRaw`
-      SELECT article_number, brand FROM cross_reference
-      WHERE oem_code = ${cleanOem} LIMIT 20
-    `;
-    await prisma.$disconnect();
-    if (dbRefs.length > 0) return res.json({ refs: dbRefs, source: 'db' });
-
-    const autodoc = require('../services/autodoc');
-    const results = await autodoc.searchOemByNo(oem);
-    const articles = (results || []).slice(0, 10).map(a => ({
+    let artId = articleId;
+    if (!artId && oem) {
+      for (const atype of ['ArticleNumber', 'OENumber']) {
+        const r0 = await fetch(`${BASE}/api/artlookup/search-articles-by-article-no?langId=4&articleNo=${encodeURIComponent(oem)}&articleType=${atype}`, { headers: headers() });
+        const d0 = await r0.json();
+        const arts0 = d0.articles || (Array.isArray(d0) ? d0 : []);
+        if (arts0.length) { artId = arts0[0].articleId; break; }
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+    if (!artId) return res.json({ refs: [], source: 'not_found' });
+    await new Promise(r => setTimeout(r, 300));
+    const r = await fetch(`${BASE}/api/artlookup/select-article-cross-references/article-id/${artId}/lang-id/4`, { headers: headers() });
+    const d = await r.json();
+    const articles = (d.articles || []).slice(0, 20).map(a => ({
+      articleId: a.articleId,
       article_number: a.articleNo,
-      brand: a.supplierName || a.manufacturerName
+      brand: a.supplierName,
+      name: a.articleProductName,
+      image: a.s3image || null,
     }));
-    res.json({ refs: articles, source: 'autodoc' });
+    res.json({ refs: articles, total: d.countArticles || articles.length, source: 'autodoc' });
   } catch(e) { res.json({ refs: [], error: e.message }); }
 });
-
 // GET /api/autodoc/compatible-cars?oem=xxx
 router.get('/compatible-cars', async (req, res) => {
   const { oem } = req.query;
@@ -577,7 +625,7 @@ router.get('/specs-by-oem', async (req, res) => {
       articleId: a.articleId, articleNo: a.articleNo,
       supplier: a.supplierName, name: a.articleProductName, image: a.s3image||null
     }))});
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/specs?articleId=7234803
@@ -588,7 +636,7 @@ router.get('/specs', async (req, res) => {
     const r = await fetch(`${BASE}/api/articles/selection-of-all-specifications-criterias-for-the-article/article-id/${articleId}/lang-id/4/country-filter-id/63`, { headers: headers() });
     const d = await r.json();
     res.json({ articleId, specs: Array.isArray(d) ? d : [] });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/related?articleId=7234803
@@ -603,7 +651,7 @@ router.get('/related', async (req, res) => {
       articleId: a.articleId, articleNo: a.articleNo,
       supplier: a.supplierName, name: a.articleProductName, image: a.s3image || null
     }))});
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/media?articleId=7234803
@@ -615,7 +663,7 @@ router.get('/media', async (req, res) => {
     const d = await r.json();
     const media = Array.isArray(d) ? d : [];
     res.json({ articleId, images: media.filter(m => m.s3image).map(m => m.s3image) });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 module.exports = router;
@@ -625,7 +673,7 @@ router.get('/suppliers', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/suppliers/list`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/crossref/article/:articleId
@@ -634,7 +682,7 @@ router.get('/crossref/article/:articleId', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/artlookup/select-article-cross-references/article-id/${req.params.articleId}/lang-id/${langId}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/crossref/partial/:articleId
@@ -643,7 +691,7 @@ router.get('/crossref/partial/:articleId', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/artlookup/select-article-cross-references-partial-match?articleId=${req.params.articleId}&langId=${langId}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/oem/equal/:oemNo
@@ -652,7 +700,7 @@ router.get('/oem/equal/:oemNo', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/articles-oem/search-all-equal-oem-no/lang-id/${langId}/article-oem-no/${req.params.oemNo}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // POST /api/autodoc/oem/equal
@@ -665,7 +713,7 @@ router.post('/oem/equal', async (req, res) => {
       body: `langId=${langId}&articleOemNo=${encodeURIComponent(articleOemNo)}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/crossref/through-oem/:articleId
@@ -674,7 +722,7 @@ router.get('/crossref/through-oem/:articleId', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/artlookup/search-for-cross-references-through-oem-numbers-by-article-id?articleId=${req.params.articleId}&supplierId=${supplierId}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // POST /api/autodoc/crossref/through-oem
@@ -687,7 +735,7 @@ router.post('/crossref/through-oem', async (req, res) => {
       body: `supplierId=${supplierId}&articleNo=${encodeURIComponent(articleNo)}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/artlookup/:articleNo
@@ -696,7 +744,7 @@ router.get('/artlookup/:articleNo', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/artlookup/search-articles-by-article-no?langId=${langId}&articleNo=${encodeURIComponent(req.params.articleNo)}&articleType=${articleType}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/oem/vehicle/:vehicleId/:searchParam
@@ -705,7 +753,7 @@ router.get('/oem/vehicle/:vehicleId/:searchParam', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/articles-oem/selecting-oem-parts-vehicle-modification-description-product-group/type-id/${typeId}/vehicle-id/${req.params.vehicleId}/lang-id/${langId}/search-param/${req.params.searchParam}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // POST /api/autodoc/artlookup/search
@@ -718,7 +766,7 @@ router.post('/artlookup/search', async (req, res) => {
       body: `articleNo=${encodeURIComponent(articleNo)}&articleType=${articleType}&langId=${langId}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/artlookup/analog/:articleNo
@@ -727,7 +775,7 @@ router.get('/artlookup/analog/:articleNo', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/artlookup/search-for-analog-spare-parts-by-the-articles-numbers/lang-id/${langId}/articleNo/${encodeURIComponent(req.params.articleNo)}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/artlookup/cross-numbers/:articleNo
@@ -736,7 +784,7 @@ router.get('/artlookup/cross-numbers/:articleNo', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/artlookup/search-for-cross-numbers/lang-id/${langId}/article-type/ArticleNumber,OENumber,IAMNumber/article-no/${encodeURIComponent(req.params.articleNo)}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // POST /api/autodoc/articles/quick-search
@@ -749,7 +797,7 @@ router.post('/articles/quick-search', async (req, res) => {
       body: `articleNo=${encodeURIComponent(articleNo)}&langId=${langId}&supplierId=${supplierId || ''}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/oem/aftermarket/:oemNo
@@ -757,7 +805,7 @@ router.get('/oem/aftermarket/:oemNo', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/artlookup/search-for-the-oem-cross-references-through-aftermarket-parts-references/article-oem-no/${encodeURIComponent(req.params.oemNo)}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/oem/analog/:oemNo
@@ -765,7 +813,7 @@ router.get('/oem/analog/:oemNo', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/artlookup/search-for-analogue-of-spare-parts-by-oem-number/article-oem-no/${encodeURIComponent(req.params.oemNo)}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/articles/search?articleNo=X&supplierId=Y&langId=4
@@ -774,7 +822,7 @@ router.get('/articles/search', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/articles/search-by-articles-no-supplier-id?articleNo=${encodeURIComponent(articleNo)}&supplierId=${supplierId || ''}&langId=${langId}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/oem/cars/:manuId/:oemNo
@@ -783,7 +831,7 @@ router.get('/oem/cars/:manuId/:oemNo', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/articles-oem/selecting-a-list-of-cars-for-oem-part-number/type-id/${typeId}/lang-id/${langId}/country-filter-id/63/manufacturer-id/${req.params.manuId}/article-oem-no/${encodeURIComponent(req.params.oemNo)}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/oem/search?articleOemNo=X&langId=4
@@ -792,7 +840,7 @@ router.get('/oem/search', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/articles-oem/search-by-article-oem-no?langId=${langId}&articleOemNo=${encodeURIComponent(articleOemNo)}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // POST /api/autodoc/oem/search
@@ -805,7 +853,7 @@ router.post('/oem/search', async (req, res) => {
       body: `langId=${langId}&articleOemNo=${encodeURIComponent(articleOemNo)}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/articles/details?articleNo=X&typeId=1&langId=4
@@ -814,7 +862,7 @@ router.get('/articles/details', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/articles/article-number-details/type-id/${typeId}?langId=${langId}&countryFilterId=63&articleNo=${encodeURIComponent(articleNo)}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/crossref/get/:articleNo/:supplierId
@@ -822,7 +870,7 @@ router.get('/crossref/get/:articleNo/:supplierId', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/artlookup/search-for-cross-references-through-oem-numbers/article-no/${encodeURIComponent(req.params.articleNo)}/supplierId/${req.params.supplierId}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/v3/search?articleNo=X&articleType=ArticleNumber&langId=4
@@ -831,7 +879,7 @@ router.get('/v3/search', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/v3/part-identifier/search-articles-by-article-no?langId=${langId}&articleType=${articleType}&articleNo=${encodeURIComponent(articleNo)}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/v3/exact?articleNo=X&supplierId=Y&langId=4
@@ -840,7 +888,7 @@ router.get('/v3/exact', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/v3/part-identifier/exact-search-articles-by-article-no?langId=${langId}&articleNo=${encodeURIComponent(articleNo)}&supplierId=${supplierId || ''}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/vin/decoder-v1/:vin
@@ -848,7 +896,7 @@ router.get('/vin/decoder-v1/:vin', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/vin/decoder-v1/${req.params.vin}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/vin/decoder-v2/:vin
@@ -856,7 +904,7 @@ router.get('/vin/decoder-v2/:vin', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/vin/decoder-v2/${req.params.vin}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/vin/decoder-v3/:vin
@@ -864,7 +912,7 @@ router.get('/vin/decoder-v3/:vin', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/vin/decoder-v3/${req.params.vin}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/vin/decoder-v5/:vin
@@ -872,76 +920,76 @@ router.get('/vin/decoder-v5/:vin', async (req, res) => {
   try {
     const r = await fetch(`${BASE}/api/vin/decoder-v5/${req.params.vin}`, { headers: headers() });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 
 // GET /api/autodoc/manufacturers/list/:typeId
 router.get('/manufacturers/list/:typeId', async (req, res) => {
-  try { res.json(await (await fetch(`${BASE}/api/manufacturers/list/type-id/${req.params.typeId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/manufacturers/list/type-id/${req.params.typeId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ===== Languages & Countries =====
 router.get('/languages/list', async (req, res) => {
-  try { res.json(await (await fetch(`${BASE}/api/languages/list`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/languages/list`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/countries/list', async (req, res) => {
-  try { res.json(await (await fetch(`${BASE}/api/countries/list`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/countries/list`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/languages/get/:langId', async (req, res) => {
-  try { res.json(await (await fetch(`${BASE}/api/languages/get-language/lang-id/${req.params.langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/languages/get-language/lang-id/${req.params.langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/countries/by-lang/:langId', async (req, res) => {
-  try { res.json(await (await fetch(`${BASE}/api/countries/list-countries-by-lang-id/${req.params.langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/countries/list-countries-by-lang-id/${req.params.langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/countries/get/:langId/:countryId', async (req, res) => {
-  try { res.json(await (await fetch(`${BASE}/api/countries/get-country/lang-id/${req.params.langId}/country-filter-id/${req.params.countryId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/countries/get-country/lang-id/${req.params.langId}/country-filter-id/${req.params.countryId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ===== Manufacturers =====
 router.get('/types/list', async (req, res) => {
-  try { res.json(await (await fetch(`${BASE}/api/types/list-vehicles-type`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/types/list-vehicles-type`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/manufacturers/find/:manuId', async (req, res) => {
-  try { res.json(await (await fetch(`${BASE}/api/manufacturers/find-by-id/${req.params.manuId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/manufacturers/find-by-id/${req.params.manuId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/manufacturers/types/:manuId', async (req, res) => {
-  try { res.json(await (await fetch(`${BASE}/api/manufacturers/get-manufacturer-types/${req.params.manuId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/manufacturers/get-manufacturer-types/${req.params.manuId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ===== Models =====
 router.get('/models/details/:typeId/:modelId', async (req, res) => {
   const { langId=4, countryId=63 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/models/type-id/${req.params.typeId}/model-id/${req.params.modelId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/models/type-id/${req.params.typeId}/model-id/${req.params.modelId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/models/by-vehicle/:typeId/:vehicleId', async (req, res) => {
   const { langId=4, countryId=63 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/models/type-id/${req.params.typeId}/vehicles/${req.params.vehicleId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/models/type-id/${req.params.typeId}/vehicles/${req.params.vehicleId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/models/basic/:typeId/:modelId', async (req, res) => {
-  try { res.json(await (await fetch(`${BASE}/api/models/type-id/${req.params.typeId}/model-id/${req.params.modelId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/models/type-id/${req.params.typeId}/model-id/${req.params.modelId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ===== Vehicles =====
 router.get('/vehicles/details/:typeId/:vehicleId', async (req, res) => {
   const { langId=4, countryId=63 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/types/type-id/${req.params.typeId}/vehicle-type-details/${req.params.vehicleId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/types/type-id/${req.params.typeId}/vehicle-type-details/${req.params.vehicleId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/vehicles/list-types/:typeId/:modelId', async (req, res) => {
   const { langId=4, countryId=63 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/types/type-id/${req.params.typeId}/list-vehicles-types/${req.params.modelId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/types/type-id/${req.params.typeId}/list-vehicles-types/${req.params.modelId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/engines/details/:engineId', async (req, res) => {
   const { langId=4 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/engines/engine-details/engine-id/${req.params.engineId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/engines/engine-details/engine-id/${req.params.engineId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/vehicles/typeid', async (req, res) => {
   const { vehicleId, manufacturerId } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/types/get-typeid-by-vehicleid?vehicleId=${vehicleId}&manufacturerId=${manufacturerId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/types/get-typeid-by-vehicleid?vehicleId=${vehicleId}&manufacturerId=${manufacturerId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/vehicles/spare-criteria/:typeId/:vehicleId', async (req, res) => {
   const { langId=4, countryId=63 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/types/selecting-all-criteria-for-spare-parts-of-a-passenger-car-using-an-olap-query/type-id/${req.params.typeId}/lang-id/${langId}/country-filter-id/${countryId}/vehicle-id/${req.params.vehicleId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/types/selecting-all-criteria-for-spare-parts-of-a-passenger-car-using-an-olap-query/type-id/${req.params.typeId}/lang-id/${langId}/country-filter-id/${countryId}/vehicle-id/${req.params.vehicleId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ===== OEM Identifier =====
@@ -952,51 +1000,51 @@ router.post('/oem/by-article-ids', async (req, res) => {
       body: JSON.stringify({ articleIds: req.body.articleIds })
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ===== Categories =====
 router.get('/category/tree', async (req, res) => {
   const { typeId=1, langId=4 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/category/type-id/${typeId}/list-category-tree-structure/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/category/type-id/${typeId}/list-category-tree-structure/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/category/groups-v1/:vehicleId', async (req, res) => {
   const { typeId=1, langId=4 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/category/type-id/${typeId}/products-groups-variant-1/${req.params.vehicleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/category/type-id/${typeId}/products-groups-variant-1/${req.params.vehicleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/category/groups-v2/:vehicleId', async (req, res) => {
   const { typeId=1, langId=4 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/category/type-id/${typeId}/products-groups-variant-2/${req.params.vehicleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/category/type-id/${typeId}/products-groups-variant-2/${req.params.vehicleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/category/groups-v3/:vehicleId', async (req, res) => {
   const { typeId=1, langId=4 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/category/type-id/${typeId}/products-groups-variant-3/${req.params.vehicleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/category/type-id/${typeId}/products-groups-variant-3/${req.params.vehicleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/category/groups-v4/:vehicleId', async (req, res) => {
   const { typeId=1, langId=4 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/category/type-id/${typeId}/products-groups-variant-4/${req.params.vehicleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/category/type-id/${typeId}/products-groups-variant-4/${req.params.vehicleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/category/search', async (req, res) => {
   const { typeId=1, langId=4, text } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/category/search-for-the-commodity-group-tree-by-description/type-id/${typeId}/lang-id/${langId}/search-text/${encodeURIComponent(text)}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/category/search-for-the-commodity-group-tree-by-description/type-id/${typeId}/lang-id/${langId}/search-text/${encodeURIComponent(text)}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/category/product-names', async (req, res) => {
   const { langId=4 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/category/list-products-names/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/category/list-products-names/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/articles/category/:articleId', async (req, res) => {
   const { langId=4 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/articles/get-article-category/article-id/${req.params.articleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/articles/get-article-category/article-id/${req.params.articleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/articles/categories/:articleId', async (req, res) => {
   const { langId=4 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/articles/get-article-categories/article-id/${req.params.articleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/articles/get-article-categories/article-id/${req.params.articleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ===== Article Details =====
 router.get('/articles/details/:articleId', async (req, res) => {
   const { langId=4 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/articles/details/article-id/${req.params.articleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/articles/details/article-id/${req.params.articleId}/lang-id/${langId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.post('/articles/complete-details', async (req, res) => {
   const { articleId, typeId=1, langId=4, countryFilterId=63 } = req.body;
@@ -1006,7 +1054,7 @@ router.post('/articles/complete-details', async (req, res) => {
       body: `typeId=${typeId}&langId=${langId}&articleId=${articleId}&countryFilterId=${countryFilterId}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.post('/articles/details-post', async (req, res) => {
   const { articleId, langId=4 } = req.body;
@@ -1016,11 +1064,11 @@ router.post('/articles/details-post', async (req, res) => {
       body: `articleId=${articleId}&langId=${langId}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/articles/criteria/:articleId', async (req, res) => {
   const { langId=4, countryId=63 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/articles/selection-of-all-specifications-criterias-for-the-article/article-id/${req.params.articleId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/articles/selection-of-all-specifications-criterias-for-the-article/article-id/${req.params.articleId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.post('/articles/specs', async (req, res) => {
   try {
@@ -1029,11 +1077,11 @@ router.post('/articles/specs', async (req, res) => {
       body: JSON.stringify({ articleIds: req.body.articleIds, langId: String(req.body.langId||4) })
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/articles/compatible-cars/:articleId', async (req, res) => {
   const { typeId=1, langId=4, supplierId, countryFilterId=63 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/articles/get-compatible-cars-by-article-number/type-id/${typeId}?langId=${langId}&supplierId=${supplierId}&articleNo=${req.params.articleId}&countryFilterId=${countryFilterId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/articles/get-compatible-cars-by-article-number/type-id/${typeId}?langId=${langId}&supplierId=${supplierId}&articleNo=${req.params.articleId}&countryFilterId=${countryFilterId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.post('/articles/compatible-cars-post', async (req, res) => {
   const { supplierId, articleNo, langId=4, countryFilterId=63, typeId=1 } = req.body;
@@ -1043,22 +1091,22 @@ router.post('/articles/compatible-cars-post', async (req, res) => {
       body: `supplierId=${supplierId}&articleNo=${encodeURIComponent(articleNo)}&langId=${langId}&countryFilterId=${countryFilterId}&typeId=${typeId}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/articles/accessories/:articleId', async (req, res) => {
   const { langId=4, countryId=63 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/articles/selecting-list-of-accessories-list-for-the-article/article-id/${req.params.articleId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/articles/selecting-list-of-accessories-list-for-the-article/article-id/${req.params.articleId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/articles/diagram/:articleId', async (req, res) => {
-  try { res.json(await (await fetch(`${BASE}/api/articles/selecting-item-coordinators-on-the-parts-diagram-image-for-the-parts-list/article-id/${req.params.articleId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/articles/selecting-item-coordinators-on-the-parts-diagram-image-for-the-parts-list/article-id/${req.params.articleId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/articles/parts-list/:articleId', async (req, res) => {
   const { langId=4, countryId=63 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/articles/list-of-parts-for-article/article-id/${req.params.articleId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/articles/list-of-parts-for-article/article-id/${req.params.articleId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/articles/media/:articleId', async (req, res) => {
   const { langId=4 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/articles/article-all-media-info?langId=${langId}&articleId=${req.params.articleId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/articles/article-all-media-info?langId=${langId}&articleId=${req.params.articleId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.post('/articles/media-post', async (req, res) => {
   const { articleId, langId=4 } = req.body;
@@ -1068,11 +1116,11 @@ router.post('/articles/media-post', async (req, res) => {
       body: `langId=${langId}&articleId=${articleId}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.get('/articles/selection-criteria/:typeId/:productId/:vehicleId/:supplierId', async (req, res) => {
   const { langId=4, countryId=63 } = req.query;
-  try { res.json(await (await fetch(`${BASE}/api/articles/selection-of-the-criteria-for-articles-and-vehicle/type-id/${req.params.typeId}/product-id/${req.params.productId}/vehicle-id/${req.params.vehicleId}/supplier-id/${req.params.supplierId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { res.json(await (await fetch(`${BASE}/api/articles/selection-of-the-criteria-for-articles-and-vehicle/type-id/${req.params.typeId}/product-id/${req.params.productId}/vehicle-id/${req.params.vehicleId}/supplier-id/${req.params.supplierId}/lang-id/${langId}/country-filter-id/${countryId}`, { headers: headers() })).json()); } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ===== Article Search =====
@@ -1084,7 +1132,7 @@ router.post('/articles/number-details', async (req, res) => {
       body: `langId=${langId}&typeId=${typeId}&articleNo=${encodeURIComponent(articleNo)}&countryFilterId=${countryFilterId}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.post('/articles/quick-search', async (req, res) => {
   const { articleNo, langId=4, supplierId } = req.body;
@@ -1094,7 +1142,7 @@ router.post('/articles/quick-search', async (req, res) => {
       body: `articleNo=${encodeURIComponent(articleNo)}&langId=${langId}&supplierId=${supplierId||''}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.post('/articles/cross-numbers', async (req, res) => {
   const { articleNo, articleType='ArticleNumber', langId=4 } = req.body;
@@ -1104,7 +1152,7 @@ router.post('/articles/cross-numbers', async (req, res) => {
       body: `articleType=${articleType}&articleNo=${encodeURIComponent(articleNo)}&langId=${langId}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // ===== OEM Search =====
@@ -1116,7 +1164,7 @@ router.post('/oem/cars-list', async (req, res) => {
       body: `manufacturerId=${manufacturerId}&langId=${langId}&typeId=${typeId}&articleOemNo=${encodeURIComponent(articleOemNo)}&countryFilterId=${countryFilterId}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.post('/oem/analog-by-article', async (req, res) => {
   const { articleNo, langId=4, articleOemNo } = req.body;
@@ -1126,7 +1174,7 @@ router.post('/oem/analog-by-article', async (req, res) => {
       body: `langId=${langId}&articleNo=${encodeURIComponent(articleNo)}&articleOemNo=${encodeURIComponent(articleOemNo||'')}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 router.post('/oem/aftermarket-refs', async (req, res) => {
   const { articleOemNo } = req.body;
@@ -1136,7 +1184,7 @@ router.post('/oem/aftermarket-refs', async (req, res) => {
       body: `articleOemNo=${encodeURIComponent(articleOemNo)}`
     });
     res.json(await r.json());
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 
@@ -1150,7 +1198,7 @@ router.get('/article-oem/:articleId', async (req, res) => {
     });
     const d = await r.json();
     res.json({ articleId: req.params.articleId, oems: d || [] });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
 // GET /api/autodoc/find-product?oem=GDB4605
@@ -1158,24 +1206,70 @@ router.get('/find-product', async (req, res) => {
   const { oem } = req.query;
   if (!oem) return res.status(400).json({ error: 'oem required' });
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-    const codes = [oem, oem.replace(/\s/g,'')];
-    const product = await prisma.product.findFirst({
-      where: { isActive: true, OR: [
-        { oemCodes: { hasSome: codes } },
-        { alternativeSearchKeys: { hasSome: codes } },
-        { sku: { in: codes } }
-      ]},
-      select: { id: true, nameKa: true, price: true, images: true, sku: true }
-    });
-    await prisma.$disconnect();
-    if (product) return res.json({ found: true, product });
-    // Autodoc-ში ვეძებთ სურათს
-    const r = await fetch(`${BASE}/api/artlookup/search-articles-by-article-no?langId=4&articleNo=${encodeURIComponent(oem)}&articleType=ArticleNumber`, { headers: headers() });
+    // AUTODOC-ში ვეძებთ
+    let arts = [];
+    for (const atype of ['ArticleNumber', 'OENumber']) {
+      await new Promise(r => setTimeout(r, 300));
+      const r = await fetch(`${BASE}/api/artlookup/search-articles-by-article-no?langId=4&articleNo=${encodeURIComponent(oem)}&articleType=${atype}`, { headers: headers() });
+      const d = await r.json();
+      arts = d.articles || (Array.isArray(d) ? d : []);
+      if (arts.length) break;
+    }
+    const articles = arts.slice(0, 6).map(a => ({
+      articleId: a.articleId,
+      articleNo: a.articleNo,
+      articleProductName: a.articleProductName,
+      supplierName: a.supplierName,
+      s3image: a.s3image || null,
+    }));
+    res.json({ articles, total: articles.length });
+  } catch(e) { res.status(500).json({ error: e.message, articles: [] }); }
+});
+
+// GET /api/autodoc/articles?categoryId=100005&vehicleId=12487(optional)
+router.get('/articles', async (req, res) => {
+  const { vehicleId, categoryId } = req.query;
+  // articles endpoint called
+  if (!categoryId || !RAPIDAPI_KEY) return res.json({ success: true, data: [], reason: 'missing params' });
+  try {
+    const vid = vehicleId || '12487';
+    const url = `${BASE}/api/articles/list/type-id/1/vehicle-id/${vid}/category-id/${categoryId}/lang-id/4`;
+    const r = await fetch(url, { headers: headers() });
     const d = await r.json();
-    const arts = d.articles || (Array.isArray(d) ? d : []);
-    const art = arts[0] || {};
-    res.json({ found: false, articleProductName: art.articleProductName || oem, image: art.s3image || null, brand: art.supplierName || null });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+    const articles = d.articles || [];
+    const data = articles.slice(0, 50).map(a => ({
+      id: String(a.articleId || a.articleNo),
+      sku: a.articleNo || '',
+      nameKa: a.articleProductName || '',
+      nameEn: a.articleProductName || '',
+      brand: a.supplierName || '',
+      price: 0,
+      stock: 0,
+      images: a.s3image ? [a.s3image] : [],
+      autodocArticleId: a.articleId || null,
+      isAutodoc: true
+    }));
+    res.json({ success: true, data });
+  } catch(e) { console.error('articles err:', e.message); res.json({ success: true, data: [], error: e.message }); }
+});
+
+// GET /api/autodoc/diagram/:articleId
+router.get('/diagram/:articleId', async (req, res) => {
+  const { articleId } = req.params;
+  try {
+    const r = await fetch(`${BASE}/api/articles/selecting-item-coordinators-on-the-parts-diagram-image-for-the-parts-list/article-id/${articleId}`, { headers: headers() });
+    const d = await r.json();
+    if (!d || !Array.isArray(d) || d.length === 0) return res.json({ parts: [], image: null });
+    const image = d[0].s3image || null;
+    const parts = d.map(p => ({
+      articleId: p.articleId,
+      articleNo: p.articleNo,
+      brand: p.supplierName,
+      x: p.senCoordX, y: p.senCoordY,
+      w: p.senCoordWidth, h: p.senCoordHeight,
+      type: p.senCordType,
+      image: p.s3image,
+    }));
+    res.json({ parts, image });
+  } catch(e) { res.json({ parts: [], image: null, error: e.message }); }
 });

@@ -30,6 +30,7 @@ router.get('/', async (req, res) => {
       SELECT autodoc_id as id, name_en, name_ka, slug, image_url, sort_order
       FROM autodoc_categories
       WHERE level = 1 AND autodoc_id NOT IN (999999, 105500)
+        AND canonical_category_id IS NULL
       ORDER BY sort_order ASC, autodoc_id ASC
     `;
 
@@ -50,13 +51,13 @@ router.get('/', async (req, res) => {
       return {
         id: String(c.id),
         slug: c.slug || String(c.id),
-        nameKa: c.name_en,
+        nameKa: (c.name_ka&&c.name_ka!==c.name_en) ? c.name_en+" / "+c.name_ka : c.name_en,
         nameEn: c.name_en,
         imageUrl: c.image_url || null,
         productCount: count,
         subcategories: subs.map(s => ({
           id: String(s.id), slug: s.slug || String(s.id),
-          nameKa: s.name_en, nameEn: s.name_en,
+          nameKa: (s.name_ka&&s.name_ka!==s.name_en) ? s.name_en+" / "+s.name_ka : s.name_en, nameEn: s.name_en,
           imageUrl: s.image_url || null,
           productCount: Number(s.product_count)
         }))
@@ -75,11 +76,13 @@ router.get('/', async (req, res) => {
 router.get('/all-slugs', async (req, res) => {
   try {
     const rows = await prisma.$queryRaw`
-      SELECT autodoc_id as id, slug, name_en, level, parent_id
-      FROM autodoc_categories WHERE is_active = true ORDER BY level, autodoc_id
+      SELECT autodoc_id as id, slug, name_en, name_ka, image_url, level, parent_id
+      FROM autodoc_categories
+      WHERE is_active = true AND canonical_category_id IS NULL
+      ORDER BY level, autodoc_id
     `;
     res.json({ success: true, data: rows.map(r => ({
-      id: r.id, slug: r.slug, nameKa: r.name_en, nameEn: r.name_en, level: r.level, parentId: r.parent_id
+      id: r.id, slug: r.slug, nameKa: r.name_ka||r.name_en, nameEn: r.name_en, imageUrl: r.image_url||null, level: r.level, parentId: r.parent_id
     }))});
   } catch(e) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -111,13 +114,13 @@ router.get('/:slugOrId', async (req, res) => {
 
     res.json({ success: true, data: {
       id: String(c.id), slug: c.slug || String(c.id),
-      nameKa: c.name_en, nameEn: c.name_en,
+      nameKa: c.name_ka||c.name_en, nameEn: c.name_en,
       imageUrl: c.image_url || null,
       parentId: c.parent_id, level: c.level,
       productCount: count,
       subcategories: children.map(s => ({
         id: String(s.id), slug: s.slug || String(s.id),
-        nameKa: s.name_en, nameEn: s.name_en,
+        nameKa: (s.name_ka&&s.name_ka!==s.name_en) ? s.name_en+" / "+s.name_ka : s.name_en, nameEn: s.name_en,
         imageUrl: s.image_url || null,
         productCount: Number(s.product_count)
       }))

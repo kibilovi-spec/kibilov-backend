@@ -103,18 +103,47 @@ async function decodeTecdocVinCheck(vin) {
   const d = await safeCall(`${BASE}/api/vin/tecdoc-vin-check/${vin}`);
   if (!d || !d.data) return null;
   const matching = (d.data.matchingVehicles && d.data.matchingVehicles.array) || d.data.matchingVehicles;
-  if (!Array.isArray(matching) || matching.length === 0) return null;
+  if (!Array.isArray(matching) || matching.length === 0) {
+    const manuArr = (d.data.matchingManufacturers && d.data.matchingManufacturers.array) || [];
+    const manuId = manuArr[0] && manuArr[0].manuId;
+    const manuName = manuArr[0] && manuArr[0].manuName;
+    if (manuId) {
+      return {
+        make: manuName || null, model: null, year: null,
+        source: 'tecdoc_manu_only', manuId: manuId, confidence: 0.4,
+      };
+    }
+    return null;
+  }
   // თუ რამდენიმე vehicle — ყველა დავაბრუნოთ
   if (matching.length > 1) {
+    // VIN 10-ე სიმბოლოდან წელი (ISO 3779)
+    const _yc = {'A':1980,'B':1981,'C':1982,'D':1983,'E':1984,'F':1985,'G':1986,'H':1987,'J':1988,'K':1989,'L':1990,'M':1991,'N':1992,'P':1993,'R':1994,'S':1995,'T':1996,'V':1997,'W':1998,'X':1999,'Y':2000,'1':2001,'2':2002,'3':2003,'4':2004,'5':2005,'6':2006,'7':2007,'8':2008,'9':2009};
+    const vinYear = vin.length >= 10 && _yc[vin[9]] ? String(_yc[vin[9]]) : null;
+    // თითოეული vehicle-ისთვის წლები ავიღოთ
+    const vehiclesWithYears = await Promise.all(matching.map(async v => {
+      let yearStr = '';
+      try {
+        const det = await safeCall(`${BASE}/api/types/type-id/1/vehicle-type-details/${v.vehicleId}/lang-id/4/country-filter-id/63`);
+        const start = det?.vehicleTypeDetails?.constructionIntervalStart;
+        const end = det?.vehicleTypeDetails?.constructionIntervalEnd;
+        if (start) {
+          const sy = start.substring(0,4);
+          const ey = end ? end.substring(0,4) : '';
+          yearStr = ey ? ` (${sy}-${ey})` : ` (${sy}-)`;
+        }
+      } catch(e) {}
+      return {
+        vehicleId: String(v.vehicleId),
+        carName: v.carName + yearStr,
+        engine: v.vehicleTypeDescription || null,
+      };
+    }));
     return {
       make: null, model: null, year: null, engine: null,
       source: 'tecdoc_multi',
       confidence: 1.0,
-      vehicles: matching.map(v => ({
-        vehicleId: String(v.vehicleId),
-        carName: v.carName,
-        engine: v.vehicleTypeDescription || null,
-      }))
+      vehicles: vehiclesWithYears
     };
   }
   const v = matching[0];
@@ -212,7 +241,54 @@ async function resolveVIN(vin, prisma) {
 
   const tecdoc = await decodeTecdocVinCheck(vinUpper);
   if (tecdoc && tecdoc.source === 'tecdoc_multi') {
+    const firstVehicle = tecdoc.vehicles && tecdoc.vehicles[0];
+    if (firstVehicle) {
+      const cached2 = await decodeFromCache(vinUpper, prisma);
+      if (cached2) return cached2;
+    }
     return tecdoc;
+  }
+  // manuId only (e.g. Mazda) — manuId-ით models ვიღებთ, VIN-ის 4-6 სიმბოლოებით chassis ვფილტრავთ
+  if (tecdoc && tecdoc.source === 'tecdoc_manu_only' && tecdoc.manuId) {
+    try {
+      const modelsR = await safeCall(`${BASE}/api/models/list/type-id/1/manufacturer-id/${tecdoc.manuId}/lang-id/4/country-filter-id/63`);
+      const models = modelsR && modelsR.models || [];
+      const vds = vinUpper.substring(3, 9); // VIN 4-9 chars = VDS
+      // chassis match: modelName-ში bracket-ებს შევამოწმოთ (BM, BN etc)
+      const chassis4 = vinUpper.substring(3, 7).toUpperCase();
+      let matched = models.filter(m => {
+        const mn = m.modelName || '';
+        const brackets = mn.match(/\(([^)]+)\)/g) || [];
+        return brackets.some(b => b.toUpperCase().includes(chassis4.substring(0,2)));
+      });
+      if (matched.length > 0) {
+        // vehicles ვიღებთ პირველი matched model-ისთვის
+        const vehicles = [];
+        for (const m of matched.slice(0,3)) {
+          const vehR = await safeCall(`${BASE}/api/types/type-id/1/list-vehicles-types/${m.modelId}/lang-id/4/country-filter-id/63`);
+          const vehList = vehR && vehR.modelTypes || [];
+          const seenVeh = new Set(vehicles.map(x => x.vehicleId));
+          vehList.slice(0,10).forEach(v => { if (seenVeh.has(String(v.vehicleId))) return; seenVeh.add(String(v.vehicleId)); vehicles.push({
+            vehicleId: String(v.vehicleId),
+            carName: `${tecdoc.make} ${m.modelName} ${v.typeEngineName || ''}`.trim(),
+            engine: v.typeEngineName || null,
+          }); });
+          if (vehicles.length >= 10) break;
+          await sleep(300);
+        }
+        if (vehicles.length > 0) {
+          return { make: tecdoc.make, model: matched[0].modelName, year: null, source: 'tecdoc_multi', confidence: 0.7, vehicles };
+        }
+      }
+    } catch(e) {}
+    // fallback — NHTSA-ს ვეძახით model/year-ისთვის
+    try {
+      const nhtsa = await decodeNHTSA(vinUpper);
+      if (nhtsa && nhtsa.model) {
+        return { make: nhtsa.make||tecdoc.make, model: nhtsa.model, year: nhtsa.year, engine: nhtsa.engine, fuel: nhtsa.fuel, source: 'nhtsa', confidence: 0.8 };
+      }
+    } catch(e) {}
+    return { make: tecdoc.make, model: null, year: null, source: 'manu_only', manuId: tecdoc.manuId, confidence: 0.3 };
   }
   if (tecdoc && tecdoc.make) {
     await saveToCache(vinUpper, tecdoc, prisma);

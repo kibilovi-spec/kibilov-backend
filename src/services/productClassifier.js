@@ -13,7 +13,7 @@ const RULES = [
   { skuMatch: /^MF\s/i, cat: 100263, name: 'Cabin Filter (MF)' },
   { skuMatch: /^(KFC|SAK)\s/i, cat: 100263, name: 'Cabin Filter (KFC/SAK)' },
   { skuMatch: /^(WB|DB-)\s?/i, cat: 100133, name: 'Wiper Blade' },
-  { skuMatch: /^W-7/i, cat: 999999, name: 'Chemical (W-7)' },
+  { skuMatch: /^W-7/i, cat: 105500, name: 'Chemical (W-7)' },
   { skuMatch: /^GDB/i, cat: 100030, name: 'Brake Pad (GDB)' },
   { skuMatch: /^BB\s/i, cat: 100030, name: 'Brake Pad (BB)' },
   
@@ -30,7 +30,7 @@ const RULES = [
   { match: /epoxy|RTV|silicone|upholster|foam.?clean/i, cat: 105500, name: 'Chemical' },
   { match: /spray.?paint|საღებავ/i, cat: 105500, name: 'Spray Paint' },
   { match: /გამოხდილი წყალი|distilled.?water/i, cat: 105500, name: 'Distilled Water' },
-  { match: /საქარე მინის წყალი|windscreen.?wash/i, cat: 100007, name: 'Washer Fluid' },
+  { match: /საქარე მინის წყალი|windscreen.?wash/i, cat: 105500, name: 'Washer Fluid' },
   { match: /სპორტული ჰ|sports.?filter|sport.?air/i, cat: 100260, name: 'Sports Air Filter' },
 
   { skuMatch: /^W-7/i, cat: 105500, name: 'Car Chemical (W-7)' },

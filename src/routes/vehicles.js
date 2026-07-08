@@ -182,8 +182,33 @@ router.get('/makes', async (req, res) => {
   }
 });
 
-// GET /api/vehicles/models?make=Toyota — მოდელების სია (DB-იდან)
+// GET /api/vehicles/models?make=Toyota — მოდელების სია (AUTODOC-იდან)
 router.get('/models', async (req, res) => {
+  const { make } = req.query;
+  if (!make) return res.status(422).json({ success: false, message: 'make საჭიროა' });
+  try {
+    const autodoc = require('../services/autodoc');
+    const mfgRaw = await autodoc.getManufacturersByType(1);
+    const mfg = (mfgRaw?.manufacturers || []).find(m => m.manufacturerName.toLowerCase() === make.toLowerCase());
+    if (!mfg) return res.json({ success: true, data: [] });
+    const modRaw = await autodoc.getModelsByManufacturer(mfg.manufacturerId);
+    const rows = modRaw?.models || [];
+    const models = rows.map(m => ({
+      id: m.modelId,
+      name: m.modelName + (m.modelYearFrom ? ' (' + m.modelYearFrom.substring(0,4) + (m.modelYearTo ? '-'+m.modelYearTo.substring(0,4) : '') + ')' : ''),
+      nameRaw: m.modelName,
+      yearFrom: m.modelYearFrom ? parseInt(m.modelYearFrom.substring(0,4)) : null,
+      yearTo: m.modelYearTo ? parseInt(m.modelYearTo.substring(0,4)) : null,
+      imageUrl: m.modelImage || null,
+    }));
+    return res.json({ success: true, data: models });
+  } catch(e) {
+    return res.json({ success: true, data: [] });
+  }
+});
+
+// GET /api/vehicles/models_old — DB version (backup)
+router.get('/models_old', async (req, res) => {
   const { make } = req.query;
   if (!make) return res.status(422).json({ success: false, message: 'make საჭიროა' });
   try {
@@ -200,7 +225,7 @@ router.get('/models', async (req, res) => {
     `;
     const models = rows.map(m => ({
       id: m.id,
-      name: m.yearFrom ? `${m.name} (${m.yearFrom}${m.yearTo && m.yearTo !== m.yearFrom ? '-'+m.yearTo : ''})` : m.name,
+      name: m.yearFrom ? m.name + ' (' + m.yearFrom + (m.yearTo && m.yearTo !== m.yearFrom ? '-'+m.yearTo : '') + ')' : m.name,
       nameRaw: m.name,
       yearFrom: m.yearFrom,
       yearTo: m.yearTo,
@@ -217,63 +242,43 @@ router.get('/engines', async (req, res) => {
   const { make, model, year } = req.query;
   if (!make || !model) return res.status(422).json({ success: false, message: 'make, model საჭიროა' });
   try {
-    const yearNum = parseInt(year) || 0;
-    // Find model_id by name (strip year from name if present)
-    const makeRow = await prisma.$queryRaw`
-      SELECT id FROM vehicle_makes WHERE LOWER(name) = LOWER(${make}) LIMIT 1
-    `;
-    if (!makeRow.length) return res.json({ success: true, data: [] });
-    const makeId = makeRow[0].id;
-
-    const modelClean = model.replace(/\s*\(.*\)\s*$/, '').trim();
-    const modelRows = await prisma.$queryRaw`
-      SELECT id FROM vehicle_models 
-      WHERE "makeId" = ${makeId} AND (
-        LOWER(name) = LOWER(${model}) OR 
-        name ILIKE ${model + '%'} OR
-        name ILIKE ${modelClean + '%'}
-      )
-      LIMIT 10
-    `;
-    if (!modelRows.length) return res.json({ success: true, data: [] });
-
-    const modelIds = modelRows.map(m => m.id);
-    let engines;
-    if (yearNum) {
-      engines = await prisma.$queryRaw`
-        SELECT DISTINCT engine_name, fuel_type, power_kw, capacity, vehicle_id
-        FROM vehicle_engines
-        WHERE model_id = ANY(${modelIds})
-        AND (year_from IS NULL OR year_from <= ${yearNum})
-        AND (year_to IS NULL OR year_to >= ${yearNum})
-        ORDER BY engine_name
-      `;
-    } else {
-      engines = await prisma.$queryRaw`
-        SELECT DISTINCT engine_name, fuel_type, power_kw, capacity, vehicle_id
-        FROM vehicle_engines
-        WHERE model_id = ANY(${modelIds})
-        ORDER BY engine_name
-      `;
+    const autodoc = require('../services/autodoc');
+    const mfgRaw = await autodoc.getManufacturersByType(1);
+    const mfg = (mfgRaw?.manufacturers || []).find(m => m.manufacturerName.toLowerCase() === make.toLowerCase());
+    if (!mfg) return res.json({ success: true, data: [] });
+    const modRaw = await autodoc.getModelsByManufacturer(mfg.manufacturerId);
+    const modelsList = modRaw?.models || [];
+    // ზუსტი დამთხვევა nameRaw-ზე, თუ არა — starts-with fallback
+    let mod = modelsList.find(m => m.modelName === model);
+    if (!mod) mod = modelsList.find(m => model.toLowerCase().startsWith((m.modelName || '').toLowerCase()));
+    if (!mod) return res.json({ success: true, data: [] });
+    const vehRaw = await autodoc.getVehicleListByModel(mod.modelId);
+    const variants = vehRaw?.modelTypes || [];
+    const seen = new Set();
+    const engines = [];
+    for (const v of variants) {
+      const label = v.typeEngineName || '';
+      if (!label || seen.has(label)) continue;
+      seen.add(label);
+      engines.push({
+        vehicle_id: v.vehicleId,
+        name: label,
+        engine: label,
+        fuelType: null,
+        powerKw: null,
+        capacity: null,
+      });
     }
-    res.json({ success: true, data: engines.map(e => ({
-      vehicle_id: e.vehicle_id,
-      name: e.engine_name,
-      engine: e.engine_name,
-      fuelType: e.fuel_type,
-      powerKw: e.power_kw,
-      capacity: e.capacity,
-    }))});
+    res.json({ success: true, data: engines });
   } catch(e) {
     res.status(500).json({ success: false, message: e.message });
   }
 });
-
 // GET /api/vehicles/vin?vin=1HGCM82633A004352
 router.get('/vin', async (req, res) => {
   const { vin } = req.query;
   if (!vin || vin.length !== 17) {
-    return res.status(400).json({ success: false, message: 'VIN კოდი 17 სიმბოლო უნდა იყოს' });
+    return res.status(400).json({ success: false, message: 'VIN კოდი 17 სიმბოლო უნდა იყოს', error: 'VIN კოდი 17 სიმბოლო უნდა იყოს' });
   }
   try {
     const vinResolver = require('../services/vinResolver');
@@ -313,9 +318,31 @@ router.get('/vin', async (req, res) => {
     const prisma2 = new PrismaClient();
     const vehicleId = await vinResolver.resolveVehicleId(resolved, prisma2, vin.toUpperCase());
     await prisma2.$disconnect();
-    res.json({ success: true, data: { vehicle, score, confidence, confidenceMsg, vehicleId } });
+    // modelId სურათისთვის
+    let modelId = null;
+    try {
+      const autodoc = require('../services/autodoc');
+      const mfgRaw = await autodoc.getManufacturersByType(1);
+      const mfg = (mfgRaw?.manufacturers||[]).find(m => m.manufacturerName.toLowerCase() === (resolved.make||'').toLowerCase());
+      if (mfg) {
+        const modRaw = await autodoc.getModelsByManufacturer(mfg.manufacturerId);
+        const modelWord = (resolved.model||'').toUpperCase().split(/[\s(]/)[0];
+        const year = resolved.year ? parseInt(resolved.year) : null;
+        const mod = (modRaw?.models||[]).find(m => {
+          if (!m.modelName.toUpperCase().includes(modelWord)) return false;
+          if (!year) return true;
+          const from = m.modelYearFrom ? parseInt(String(m.modelYearFrom).substring(0,4)) : 0;
+          const to = m.modelYearTo ? parseInt(String(m.modelYearTo).substring(0,4)) : 9999;
+          return year >= from && year <= to;
+        });
+        if (mod) modelId = mod.modelId;
+      }
+    } catch(e) {}
+    const carImage = modelId ? `https://fsn1.your-objectstorage.com/tecdoc2025/models/${modelId}.jpg` : null;
+    const confidenceColor = confidence === 'high' ? 'green' : confidence === 'medium' ? 'yellow' : 'red';
+    res.json({ success: true, data: { vehicle, score, confidence, confidenceMsg, confidenceLabel: confidenceMsg, confidenceColor, vehicleId, modelId, carImage } });
   } catch(e) {
-    res.status(503).json({ success: false, message: 'VIN lookup მიუწვდომელია', showManual: true });
+    res.status(503).json({ success: false, message: 'VIN lookup მიუწვდომელია', error: 'VIN lookup მიუწვდომელია', showManual: true });
   }
 });
 

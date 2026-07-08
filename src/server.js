@@ -5,6 +5,10 @@ Sentry.init({
   dsn: process.env.SENTRY_DSN_BACKEND,
   environment: process.env.NODE_ENV || 'production',
   tracesSampleRate: 0.1,
+  beforeSend(event) {
+    if (event.environment === 'development') return null;
+    return event;
+  },
 });
 const express      = require('express');
 const cors         = require('cors');
@@ -102,6 +106,7 @@ app.use('/api/autodoc-search',    require('./routes/autodoc_search'));
 app.use('/api/ai',        require('./routes/ai'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/garage', require('./routes/garage'));
+app.use('/api/autodoc', require('./routes/autodoc_articles'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/supplier',  require('./routes/supplier'));
 app.use('/api/fina',       require('./routes/fina'));
@@ -109,6 +114,14 @@ app.use('/api/contact',    require('./routes/contact'));
 app.use('/api/parts', require('./routes/parts'));
 app.use('/api/garages', require('./routes/garages'));
 app.use('/api/upload', require('./routes/upload'));
+app.use('/api/support', require('./routes/support'));
+
+// Stock alerts — ყოველ 6 საათში
+const { checkStockAlerts } = require('./services/stockAlert');
+setInterval(checkStockAlerts, 6*60*60*1000);
+setTimeout(checkStockAlerts, 30*1000); // პირველი შემოწმება 30 წამში
+app.use('/api/supplier', require('./routes/supplierNotifications'));
+app.use('/api/supplier', require('./routes/supplierApi'));
 app.use('/api/admin', require('./routes/admin2'));
 app.use('/api/vin',   require('./routes/vin'));
 
@@ -213,6 +226,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.use('/api/payout', require('./routes/payout'));
+// DISABLED: duplicate/superseded by /api/supplier/payout-request in routes/supplier.js — never used by frontend
+// app.use('/api/payout', require('./routes/payout'));
 module.exports = app;
 
