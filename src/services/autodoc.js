@@ -43,7 +43,7 @@ const getVehicleListByModel = (modelId, typeId=1, langId=4, countryId=63) => cal
 const getVehicleListTypes   = (modelId, typeId=1, langId=4, countryId=63) => call(() => api.get(`/api/types/type-id/${typeId}/list-vehicles-types/${modelId}/lang-id/${langId}/country-filter-id/${countryId}`).then(r => r.data));
 const getEngineDetails      = (engineId, langId=4) => call(() => api.get(`/api/engines/engine-details/engine-id/${engineId}/lang-id/${langId}`).then(r => r.data));
 const getTypeIdByVehicleId  = (vehicleId, manufacturerId) => call(() => api.get(`/api/types/get-typeid-by-vehicleid?vehicleId=${vehicleId}&manufacturerId=${manufacturerId}`).then(r => r.data));
-const getVehicleSpaCriteria = (vehicleId, typeId=1, langId=4, countryId=63) => call(() => api.get(`/api/types/selecting-all-criteria-for-spare-parts-of-a-passenger-car-using-an-olap-query/type-id/${typeId}/lang-id/${langId}/country-filter-id/${countryId}/vehicle-id/${vehicleId}`).then(r => r.data));
+const getVehicleSpaCriteria = (vehicleId, typeId=1, langId=4, countryId=63) => call(() => api.get(`/api/types/selecting-all-criteria-for-spare-parts-of-a-passenger-car-using-an-olap-query/type-id/${typeId}/lang-id/${langId}/country-filter-id/${countryId}/vehicle-id/${vehicleId}`, { timeout: 30000 }).then(r => r.data));
 
 // Categories
 const getCategoryTree     = (typeId=1, langId=4) => call(() => api.get(`/api/category/type-id/${typeId}/list-category-tree-structure/lang-id/${langId}`).then(r => r.data));
@@ -74,7 +74,7 @@ const searchOemByNo       = articleOemNo => call(() => api.get(`/api/articles-oe
 // Cross References
 const getCrossRefs          = (articleId, langId=4) => call(() => api.get(`/api/artlookup/select-article-cross-references/article-id/${articleId}/lang-id/${langId}`).then(r => r.data));
 const getCrossRefsPartial   = (articleId, langId=4) => call(() => api.get(`/api/artlookup/select-article-cross-references-partial-match?articleId=${articleId}&langId=${langId}`).then(r => r.data));
-const getCrossRefsByOem     = (articleNo, supplierId) => call(() => api.get(`/api/artlookup/search-for-cross-references-through-oem-numbers/article-no/${encodeURIComponent(articleNo)}/supplierId/${supplierId}`).then(r => r.data));
+const getCrossRefsByOem     = (articleId, supplierId) => call(() => api.get(`/api/artlookup/search-for-cross-references-through-oem-numbers-by-article-id?articleId=${articleId}&supplierId=${supplierId}`).then(r => r.data));
 const getAftermarketRefs    = articleOemNo => call(() => api.post('/api/artlookup/search-for-the-oem-cross-references-through-aftermarket-parts-references', new URLSearchParams({ articleOemNo }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }).then(r => r.data));
 const getAnalogByOem        = articleOemNo => call(() => api.get(`/api/artlookup/search-for-analogue-of-spare-parts-by-oem-number/article-oem-no/${encodeURIComponent(articleOemNo)}`).then(r => r.data));
 const searchByArticleNo     = (articleNo, articleType='ArticleNumber', langId=4) => call(() => api.get(`/api/artlookup/search-articles-by-article-no?langId=${langId}&articleNo=${encodeURIComponent(articleNo)}&articleType=${articleType}`).then(r => r.data));
@@ -83,6 +83,48 @@ const searchByArticleNo     = (articleNo, articleType='ArticleNumber', langId=4)
 const getSuppliersList = () => call(() => api.get('/api/suppliers/list').then(r => r.data));
 const getLanguagesList = () => call(() => api.get('/api/languages/list').then(r => r.data));
 const getCountriesList = () => call(() => api.get('/api/countries/list').then(r => r.data));
+
+
+// Article Details & Compatibility for Article ID
+const getArticleFullDetails = (articleId, typeId=1, langId=4, countryId=63) =>
+  call(() => api.get(`/api/articles/article-complete-details/type-id/${typeId}?langId=${langId}&countryFilterId=${countryId}&articleId=${articleId}`).then(r => r.data));
+
+// Bulk article specifications
+const getArticleSpecsBulk = (articleIds, langId=4) =>
+  call(() => api.post('/api/articles/get-article-specifications-list-of-articles-ids', { articleIds, langId }).then(r => r.data));
+
+// Product names by vehicle
+const getProductNamesByVehicle = (vehicleId, typeId=1, langId=4) =>
+  call(() => api.get(`/api/category/type-id/${typeId}/list-products-names?langId=${langId}&vehicleId=${vehicleId}`).then(r => r.data));
+
+// Article details by article number (POST)
+const getArticleDetailsByNo = (articleNo, typeId=1, langId=4, countryId=63) =>
+  call(() => api.post('/api/articles/article-number-details',
+    new URLSearchParams({ langId, typeId, articleNo, countryFilterId: countryId }),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  ).then(r => r.data));
+
+// Compatible vehicles by OEM number
+const getCompatibleVehiclesByOem = (articleOemNo, typeId=1, langId=4, countryId=63) =>
+  call(() => api.get(`/api/articles/get-compatible-cars-by-oem-no/type-id/${typeId}?langId=${langId}&countryFilterId=${countryId}&articleOemNo=${encodeURIComponent(articleOemNo)}`).then(r => r.data));
+
+// Compatible vehicles by OEM number and manufacturer
+const getCompatibleVehiclesByOemAndManufacturer = (articleOemNo, manufacturerId, typeId=1, langId=4, countryId=63) =>
+  call(() => api.get(`/api/articles-oem/selecting-a-list-of-cars-for-oem-part-number/type-id/${typeId}/lang-id/${langId}/country-filter-id/${countryId}/manufacturer-id/${manufacturerId}/article-oem-no/${encodeURIComponent(articleOemNo)}`).then(r => r.data));
+
+// Analog spare parts by article number and OEM number
+const getAnalogByArticleNo = (articleNo, articleOemNo, langId=4) =>
+  call(() => api.post('/api/artlookup/search-for-analog-spare-parts-by-the-articles-numbers',
+    new URLSearchParams({ langId, articleNo, articleOemNo }),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  ).then(r => r.data));
+
+// Search for cross-numbers
+const searchCrossNumbers = (articleNo, articleType, langId=4) =>
+  call(() => api.post('/api/artlookup/search-for-cross-numbers',
+    new URLSearchParams({ articleType, articleNo, langId }),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  ).then(r => r.data));
 
 module.exports = {
   vinCheck, vinDecodeV1, vinDecodeV2, vinDecodeV3, vinDecodeV5,
@@ -99,4 +141,7 @@ module.exports = {
   getCrossRefs, getCrossRefsPartial, getCrossRefsByOem,
   getAftermarketRefs, getAnalogByOem, searchByArticleNo,
   getSuppliersList, getLanguagesList, getCountriesList,
+  getArticleFullDetails, getArticleSpecsBulk, getProductNamesByVehicle,
+  getArticleDetailsByNo, getCompatibleVehiclesByOem, getCompatibleVehiclesByOemAndManufacturer,
+  getAnalogByArticleNo, searchCrossNumbers,
 };
