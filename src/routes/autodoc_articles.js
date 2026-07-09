@@ -25,7 +25,6 @@ router.get('/articles', async (req, res) => {
       const cached = await redisClient.get(cacheKey);
       if (cached) return res.json({ success: true, data: JSON.parse(cached), cached: true });
     } catch {}
-    const vid = vehicleId || '19942';
     // slug → numeric id კონვერტაცია
     let catId = categoryId;
     if (isNaN(parseInt(categoryId))) {
@@ -36,26 +35,55 @@ router.get('/articles', async (req, res) => {
       } catch { return res.json({ success: true, data: [] }); }
     }
 
-    const r = await axios.get(
-      `https://autodoc-parts-catalog.p.rapidapi.com/api/articles/list/type-id/1/vehicle-id/${vid}/category-id/${catId}/lang-id/4`,
-      { headers: HEADERS, timeout: 10000 }
-    );
+    let data;
 
-    const arts = r.data?.articles || [];
-    const data = arts.map((a) => ({
-      id: 'autodoc_' + a.articleId,
-      sku: a.articleNo,
-      nameEn: a.articleProductName,
-      nameKa: a.articleProductName,
-      brand: a.supplierName,
-      images: a.s3image ? [a.s3image] : [],
-      price: null,
-      stock: 1,
-      source: 'autodoc',
-      oemCodes: [a.articleNo],
-      autodocArticleId: a.articleId,
-      descriptionEn: (a.articleAllSpecifications||[]).map(s=>s.criteriaName+': '+s.criteriaValue).join('\n'),
-    }));
+    if (!vehicleId) {
+      // ვეჰიკლის გარეშე — ადრე ჰარდქოდირებული ერთი მანქანა (#19942) გამოიყენებოდა,
+      // რაც კატეგორიის მთელი ასორტიმენტის ნაცვლად მხოლოდ ერთი მანქანის თავსებადობას
+      // აჩვენებდა. ახლა ვიყენებთ ჩვენს საკუთარ, მრავალ-მარკიან reference-ცხრილს.
+      const refRows = await pgPool.query(
+        `SELECT DISTINCT ON (article_id) article_id, article_code, brand, description, image_url, oem_codes
+         FROM autodoc_reference_data
+         WHERE autodoc_category_id = $1 AND article_id IS NOT NULL
+         ORDER BY article_id, id
+         LIMIT 50`,
+        [parseInt(catId)]
+      );
+      data = refRows.rows.map((a) => ({
+        id: 'autodoc_' + a.article_id,
+        sku: a.article_code || '',
+        nameEn: a.description || '',
+        nameKa: a.description || '',
+        brand: a.brand || '',
+        images: a.image_url ? [a.image_url] : [],
+        price: null,
+        stock: 1,
+        source: 'reference_data',
+        oemCodes: a.oem_codes ? a.oem_codes.split(',') : [],
+        autodocArticleId: Number(a.article_id),
+        descriptionEn: '',
+      }));
+    } else {
+      const r = await axios.get(
+        `https://autodoc-parts-catalog.p.rapidapi.com/api/articles/list/type-id/1/vehicle-id/${vehicleId}/category-id/${catId}/lang-id/4`,
+        { headers: HEADERS, timeout: 10000 }
+      );
+      const arts = r.data?.articles || [];
+      data = arts.map((a) => ({
+        id: 'autodoc_' + a.articleId,
+        sku: a.articleNo,
+        nameEn: a.articleProductName,
+        nameKa: a.articleProductName,
+        brand: a.supplierName,
+        images: a.s3image ? [a.s3image] : [],
+        price: null,
+        stock: 1,
+        source: 'autodoc',
+        oemCodes: [a.articleNo],
+        autodocArticleId: a.articleId,
+        descriptionEn: (a.articleAllSpecifications||[]).map(s=>s.criteriaName+': '+s.criteriaValue).join('\n'),
+      }));
+    }
 
     if (data.length > 0) { try { await redisClient.setEx(cacheKey, 3600, JSON.stringify(data)); } catch {} }
     res.json({ success: true, data });

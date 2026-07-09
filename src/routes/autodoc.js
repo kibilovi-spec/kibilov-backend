@@ -1230,10 +1230,46 @@ router.get('/find-product', async (req, res) => {
 router.get('/articles', async (req, res) => {
   const { vehicleId, categoryId } = req.query;
   // articles endpoint called
-  if (!categoryId || !RAPIDAPI_KEY) return res.json({ success: true, data: [], reason: 'missing params' });
+  if (!categoryId) return res.json({ success: true, data: [], reason: 'missing params' });
+
+  // vehicleId არ არის მოცემული — ვქმენით ჩვენივე reference-ცხრილიდან
+  // (ადრე აქ ჰარდქოდირებული ერთი მანქანა (#12487) გამოიყენებოდა, რაც კატეგორიის
+  // მთელი ასორტიმენტის ნაცვლად მხოლოდ ერთი მანქანის თავსებადობას აჩვენებდა)
+  if (!vehicleId) {
+    try {
+      const { PrismaClient } = require('@prisma/client');
+      const prisma = new PrismaClient();
+      const rows = await prisma.$queryRaw`
+        SELECT DISTINCT ON (article_id)
+          article_id, article_code, brand, description, image_url
+        FROM autodoc_reference_data
+        WHERE autodoc_category_id = ${parseInt(categoryId)} AND article_id IS NOT NULL
+        ORDER BY article_id, id
+        LIMIT 50
+      `;
+      const data = rows.map(a => ({
+        id: String(a.article_id),
+        sku: a.article_code || '',
+        nameKa: a.description || '',
+        nameEn: a.description || '',
+        brand: a.brand || '',
+        price: 0,
+        stock: 0,
+        images: a.image_url ? [a.image_url] : [],
+        autodocArticleId: a.article_id ? Number(a.article_id) : null,
+        isAutodoc: true,
+      }));
+      return res.json({ success: true, data, source: 'reference_data' });
+    } catch (e) {
+      console.error('articles reference_data err:', e.message);
+      return res.json({ success: true, data: [], error: e.message });
+    }
+  }
+
+  // vehicleId მოცემულია (რეალური მანქანა, მაგ. VIN-იდან) — ცოცხალი Autodoc call
+  if (!RAPIDAPI_KEY) return res.json({ success: true, data: [], reason: 'missing params' });
   try {
-    const vid = vehicleId || '12487';
-    const url = `${BASE}/api/articles/list/type-id/1/vehicle-id/${vid}/category-id/${categoryId}/lang-id/4`;
+    const url = `${BASE}/api/articles/list/type-id/1/vehicle-id/${vehicleId}/category-id/${categoryId}/lang-id/4`;
     const r = await fetch(url, { headers: headers() });
     const d = await r.json();
     const articles = d.articles || [];
@@ -1249,7 +1285,7 @@ router.get('/articles', async (req, res) => {
       autodocArticleId: a.articleId || null,
       isAutodoc: true
     }));
-    res.json({ success: true, data });
+    res.json({ success: true, data, source: 'live_autodoc' });
   } catch(e) { console.error('articles err:', e.message); res.json({ success: true, data: [], error: e.message }); }
 });
 
