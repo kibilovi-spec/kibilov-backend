@@ -1,12 +1,84 @@
 'use strict';
 const express = require('express');
 const axios   = require('axios');
+const CloudIpsp = require('cloudipsp-node-js-sdk');
 const { PrismaClient } = require('@prisma/client');
 const { authenticate } = require('../middleware/auth');
 const router  = express.Router();
 const prisma  = new PrismaClient();
 
-// ─── BOG Payment ───────────────────────────────────────────────────────────────
+// ─── Flitt Payment (active — primary payment method) ──────────────────────────
+const flitt = new CloudIpsp({
+  merchantId: Number(process.env.FLITT_MERCHANT_ID),
+  secretKey: process.env.FLITT_SECRET_KEY,
+});
+
+// POST /api/payment/flitt/init
+router.post('/flitt/init', authenticate, async (req, res) => {
+  const { orderId } = req.body;
+  const order = await prisma.order.findFirst({ where: { id: orderId, userId: req.user.id }, include: { items: true } });
+  if (!order) return res.status(404).json({ success: false, message: 'შეკვეთა არ მოიძებნა' });
+
+  try {
+    const amountInTetri = Math.round(Number(order.total) * 100);
+    const result = await flitt.Checkout({
+      order_id: `${order.id.replace(/-/g, '')}_${Date.now()}`,
+      order_desc: `Kibilov.ge შეკვეთა #${order.orderNumber || order.id.slice(0, 8)}`,
+      currency: 'GEL',
+      amount: String(amountInTetri),
+      merchant_data: JSON.stringify({ orderId: order.id }),
+      server_callback_url: `${process.env.CLIENT_URL}/api/payment/flitt/callback`,
+      response_url: `${process.env.CLIENT_URL}/orders/${order.id}?success=1`,
+    });
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { paymentUrl: result.checkout_url, paymentMethod: 'flitt' },
+    });
+    res.json({ success: true, paymentUrl: result.checkout_url, orderId });
+  } catch (e) {
+    console.error('[Flitt] Error:', e.response || e.message);
+    res.status(500).json({ success: false, message: 'გადახდის ინიციალიზაციის შეცდომა' });
+  }
+});
+
+// POST /api/payment/flitt/callback (webhook from Flitt)
+router.post('/flitt/callback', async (req, res) => {
+  try {
+    const data = req.body;
+
+    if (!flitt.isValidResponse(data)) {
+      console.error('[Flitt Callback] Invalid signature — possible fraud attempt', data.order_id);
+      return res.status(400).send('Invalid signature');
+    }
+
+    let orderId;
+    try { orderId = JSON.parse(data.merchant_data || '{}').orderId; } catch {}
+    if (!orderId) return res.status(400).send('Missing orderId');
+
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return res.status(404).send('Order not found');
+
+    const paymentStatus =
+      data.order_status === 'approved' ? 'PAID' :
+      (data.order_status === 'declined' || data.order_status === 'expired') ? 'FAILED' : 'PENDING';
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        paymentStatus,
+        status: paymentStatus === 'PAID' ? 'CONFIRMED' : order.status,
+        paymentId: data.payment_id ? String(data.payment_id) : order.paymentId,
+      },
+    });
+    res.status(200).send('OK');
+  } catch (e) {
+    console.error('[Flitt Callback]', e.message);
+    res.status(500).send('Error');
+  }
+});
+
+// ─── BOG Payment (inactive — kept for reference, not used by frontend) ────────
 // BOG uses OAuth2 + REST API
 // Docs: https://developer.bog.ge
 
