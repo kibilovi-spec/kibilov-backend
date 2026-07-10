@@ -138,7 +138,7 @@ router.get('/', async (req, res) => {
   const [orders, total] = await Promise.all([
     prisma.order.findMany({ where, orderBy: { createdAt: 'desc' },
       skip: (parseInt(page)-1) * parseInt(limit), take: parseInt(limit),
-      include: { items: true, user: { select: { name:true, email:true, phone:true }}}
+      include: { items: { include: { product: true } }, user: { select: { name:true, email:true, phone:true }}}
     }),
     prisma.order.count({ where }),
   ]);
