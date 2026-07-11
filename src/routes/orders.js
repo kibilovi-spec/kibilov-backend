@@ -93,6 +93,13 @@ router.post('/', async (req, res) => {
       return newOrder;
     });
 
+    // Shipment-ების შექმნა — შეკვეთა იყოფა pickup-წყაროს მიხედვით
+    // (საკუთარი მაღაზია vs სხვადასხვა მომწოდებელი)
+    try {
+      const { createShipmentsForOrder } = require('../services/shipmentEngine');
+      await createShipmentsForOrder(order.id);
+    } catch (e) { console.error('[Shipment creation error]', e.message); }
+
     // Analytics: purchased = true
     try {
       await prisma.$executeRaw`UPDATE search_analytics SET purchased=true WHERE cart_added=true AND purchased=false AND created_at > NOW()-INTERVAL '1 hour'`;

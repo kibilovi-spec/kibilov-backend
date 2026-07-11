@@ -89,6 +89,7 @@ model Product {
   finaId                String?             @unique
   sku                   String              @unique
   barcode               String?             @unique
+  weightCategory        String              @default("SMALL")
   brand                 String
   nameKa                String
   nameEn                String              @default("")
@@ -231,6 +232,7 @@ model Order {
   updatedAt       DateTime      @updatedAt
   paymentUrl      String?
   items           OrderItem[]
+  shipments       Shipment[]
   address         Address?      @relation(fields: [addressId], references: [id])
   user            User          @relation(fields: [userId], references: [id])
   payment         Payment?
@@ -252,6 +254,7 @@ model OrderItem {
   total     Decimal @db.Decimal(10, 2)
   order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product   Product @relation(fields: [productId], references: [id])
+  shipmentItems ShipmentItem[]
 
   @@index([orderId], map: "idx_order_items_order_id")
   @@index([productId], map: "idx_order_items_product_id")
@@ -433,6 +436,7 @@ model Supplier {
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
   listings               ProductListing[]
+  shipments              Shipment[]
   supplier_notifications supplier_notifications[]
   payouts                SupplierPayout[]
   importLogs             SupplierImportLog[]
@@ -1150,4 +1154,46 @@ model AutodocReferenceData {
   oem_codes          String?
 
   @@map("autodoc_reference_data")
+}
+
+model Shipment {
+  id               String         @id @default(uuid())
+  orderId          String
+  pickupType       String         @default("OWN_SHOP")
+  supplierId       String?
+  pickupAddress    String
+  pickupPhone      String         @default("")
+  deliveryAddress  String         @default("")
+  status           String         @default("PENDING_CONFIRMATION")
+  deliveryProvider String?
+  providerOrderId  String?
+  vehicleType      String         @default("BIKE")
+  courierName      String?
+  courierPhone     String?
+  trackingUrl      String?
+  readyAt          DateTime?
+  dispatchedAt     DateTime?
+  deliveredAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  supplier         Supplier?      @relation(fields: [supplierId], references: [id])
+  items            ShipmentItem[]
+
+  @@index([orderId], map: "idx_shipments_order_id")
+  @@index([supplierId], map: "idx_shipments_supplier_id")
+  @@map("shipments")
+}
+
+model ShipmentItem {
+  id          String     @id @default(uuid())
+  shipmentId  String
+  orderItemId String
+  qty         Int        @default(1)
+  shipment    Shipment   @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderItem   OrderItem  @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId], map: "idx_shipment_items_shipment_id")
+  @@index([orderItemId], map: "idx_shipment_items_order_item_id")
+  @@map("shipment_items")
 }
