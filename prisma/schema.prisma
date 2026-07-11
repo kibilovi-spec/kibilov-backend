@@ -88,6 +88,7 @@ model Product {
   id                    String              @id @default(uuid())
   finaId                String?             @unique
   sku                   String              @unique
+  barcode               String?             @unique
   brand                 String
   nameKa                String
   nameEn                String              @default("")
@@ -1123,4 +1124,29 @@ enum PayoutStatus {
   APPROVED
   REJECTED
   PAID
+}
+
+// ⚠️ ეს ცხრილი (და, სავარაუდოდ, import_batches.rejected_count-ის მსგავსი კიდევ სხვა
+// ველები/ცხრილები) თავდაპირველად შეიქმნა RAW SQL-ით, schema.prisma-ს გვერდის ავლით.
+// 2026-07-11-ს, `prisma db push` ბრძანებამ ეს ცხრილი წაშალა (რადგან schema.prisma-ში
+// არ იყო აღწერილი) — აღდგენილია backup-იდან. ᲐᲠᲐᲡᲓᲠᲝᲡ გაუშვა `prisma db push`
+// ან `prisma migrate` ამის შემდეგ, სანამ jer არ დარწმუნდები `prisma db pull`-ით,
+// რომ schema.prisma ზუსტად ემთხვევა რეალურ ბაზას — შესაძლოა კიდევ არსებობდეს
+// მსგავსი, აქ ჯერ არ-აღწერილი raw-SQL ცხრილები.
+model AutodocReferenceData {
+  id                 Int      @id @default(autoincrement())
+  make               String?
+  model              String?
+  category_en        String?
+  autodoc_category_id Int?
+  brand              String?
+  article_code       String?
+  description        String?
+  image_url          String?
+  created_at         DateTime? @default(now())
+  article_id         BigInt?
+  cross_codes        String?
+  oem_codes          String?
+
+  @@map("autodoc_reference_data")
 }

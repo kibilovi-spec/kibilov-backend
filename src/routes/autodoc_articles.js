@@ -99,56 +99,28 @@ router.get('/featured', async (req, res) => {
       const cached = await redisClient.get('featured:default');
       if (cached) return res.json({ success: true, data: JSON.parse(cached), cached: true });
     } catch {}
-    // პოპულარული vehicle + კატეგორიები
-    const COMBOS = [
-      { vehicleId: 19942,  categoryId: 100259 },  // KIA CEE'D — Oil Filter
-      { vehicleId: 108275, categoryId: 100259 },  // Mercedes W204 — Oil Filter
-      { vehicleId: 19942,  categoryId: 100260 },  // KIA — Air Filter
-      { vehicleId: 19942,  categoryId: 100263 },  // KIA — Cabin Filter
-      { vehicleId: 19942,  categoryId: 100034 },  // KIA — Shock Absorber
-      { vehicleId: 108275, categoryId: 100034 },  // Mercedes — Shock Absorber
-      { vehicleId: 19942,  categoryId: 100003 },  // KIA — Spark Plug
-      { vehicleId: 19942,  categoryId: 100028 },  // KIA — Timing Belt
-      { vehicleId: 19942,  categoryId: 100016 },  // KIA — Water Pump
-      { vehicleId: 108275, categoryId: 100030 },  // Mercedes — Brake Pad
-      { vehicleId: 19942,  categoryId: 100032 },  // KIA — Brake Disc
-      { vehicleId: 108275, categoryId: 100032 },  // Mercedes — Brake Disc
-      { vehicleId: 19942,  categoryId: 100001 },  // KIA — Engine Mount
-      { vehicleId: 19942,  categoryId: 100011 },  // KIA — CV Joint
-      { vehicleId: 108275, categoryId: 100016 },  // Mercedes — Water Pump
-    ];
-
-    const results = [];
-    const seen = new Set();
-
-    for (const { vehicleId, categoryId } of COMBOS) {
-      if (results.length >= 40) break;
-      try {
-        const r = await axios.get(
-          `https://autodoc-parts-catalog.p.rapidapi.com/api/articles/list/type-id/1/vehicle-id/${vehicleId}/category-id/${categoryId}/lang-id/4`,
-          { headers: HEADERS, timeout: 8000 }
-        );
-        const arts = r.data?.articles || [];
-        for (const a of arts.slice(0, 3)) {
-          if (!seen.has(a.articleId)) {
-            seen.add(a.articleId);
-            results.push({
-              id: 'autodoc_' + a.articleId,
-              sku: a.articleNo,
-              nameEn: a.articleProductName,
-              nameKa: a.articleProductName,
-              brand: a.supplierName,
-              images: a.s3image ? [a.s3image] : [],
-              price: null,
-              stock: 1,
-              source: 'autodoc',
-              oemCodes: [a.articleNo],
-              autodocArticleId: a.articleId,
-            });
-          }
-        }
-      } catch {}
-    }
+    const CATEGORY_IDS = [100259, 100260, 100263, 100034, 100003, 100028, 100016, 100030, 100032, 100001, 100011];
+    const refRows = await pgPool.query(
+      `SELECT DISTINCT ON (article_id) article_id, article_code, brand, description, image_url, oem_codes
+       FROM autodoc_reference_data
+       WHERE autodoc_category_id = ANY($1::int[]) AND article_id IS NOT NULL
+       ORDER BY article_id, id
+       LIMIT 40`,
+      [CATEGORY_IDS]
+    );
+    const results = refRows.rows.map((a) => ({
+      id: 'autodoc_' + a.article_id,
+      sku: a.article_code || '',
+      nameEn: a.description || '',
+      nameKa: a.description || '',
+      brand: a.brand || '',
+      images: a.image_url ? [a.image_url] : [],
+      price: null,
+      stock: 1,
+      source: 'reference_data',
+      oemCodes: a.oem_codes ? a.oem_codes.split(',') : [],
+      autodocArticleId: Number(a.article_id),
+    }));
 
     if (results.length > 0) { try { await redisClient.setEx('featured:default', 7200, JSON.stringify(results)); } catch {} }
     res.json({ success: true, data: results });
