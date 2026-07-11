@@ -6,7 +6,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const BASE = `https://api.telegram.org/bot${TOKEN}`;
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY_TELEGRAM || process.env.ANTHROPIC_API_KEY });
 const sessions = new Map();
 
 async function sendMessage(chatId, text) {

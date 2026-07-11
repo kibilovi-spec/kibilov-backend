@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
-const _anthropicClient = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
+const _anthropicClient = process.env.ANTHROPIC_API_KEY_VIN_OCR ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY_VIN_OCR }) : null;
 const router  = express.Router();
 
 // VIN Confidence Score

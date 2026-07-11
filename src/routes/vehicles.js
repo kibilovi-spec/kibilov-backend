@@ -141,7 +141,7 @@ router.get('/why-this-part', authenticate, async (req, res) => {
     if (!product || !mainVehicle) return res.json({ success: false });
 
     const Anthropic = require('@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY_WHY_PART || process.env.ANTHROPIC_API_KEY });
 
     const r = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',

@@ -71,7 +71,7 @@ function setFallbackCache(key, data) {
   if (_autodocFallbackCache.size > 500) { const firstKey = _autodocFallbackCache.keys().next().value; _autodocFallbackCache.delete(firstKey); }
 }
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY_CHAT || process.env.ANTHROPIC_API_KEY });
 
 const GENERATIONS = {
   'Golf 3': ['1991','1992','1993','1994','1995','1996','1997','1998','Golf III','Golf3'],
