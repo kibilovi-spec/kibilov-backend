@@ -255,7 +255,12 @@ router.post('/ocr', async (req, res) => {
         res.json({ vin: vinMatch[0], raw: rawText });
       } catch (e) {
         console.error('OCR error:', e.message);
-        res.status(500).json({ error: 'სურათის დამუშავება ვერ მოხერხდა: ' + e.message });
+        // AI-სერვისის დროებითი მიუწვდომლობისას (მაგ. credits/API-ლიმიტი) —
+        // 200 + ნათელი ქართული მითითება ხელით შეყვანაზე, არა raw API-შეცდომა
+        res.status(200).json({
+          vin: null,
+          message: 'ფოტოდან ამოცნობა ამჟამად მიუწვდომელია — გთხოვთ, ხელით შეიყვანოთ VIN კოდი',
+        });
       }
     });
   } catch(e) { console.error('[vin.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
