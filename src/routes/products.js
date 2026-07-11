@@ -711,8 +711,9 @@ router.get('/:id/listings', async (req, res) => {
 // PUT /api/products/:id (admin)
 router.put('/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { nameKa, nameEn, nameRu, brand, articleNumber, price, stock, description, isActive, images, autodocCategoryId } = req.body;
+    const { sku, nameKa, nameEn, nameRu, brand, articleNumber, price, stock, description, isActive, images, autodocCategoryId } = req.body;
     const updateData = {};
+    if (sku !== undefined && sku !== null && sku.trim() !== '') updateData.sku = sku.trim();
     if (nameKa !== undefined) updateData.nameKa = nameKa;
     if (nameEn !== undefined) updateData.nameEn = nameEn;
     if (nameRu !== undefined) updateData.nameRu = nameRu;
@@ -732,7 +733,12 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
     await cache.del(`product:${req.params.id}`);
     await cache.flush('products:*');
     res.json({ success:true, data: p });
-  } catch(e) { res.status(400).json({ success:false, message: e.message }); }
+  } catch(e) {
+    if (e.code === 'P2002' && e.meta?.target?.includes('sku')) {
+      return res.status(400).json({ success:false, message: 'ეს SKU უკვე გამოიყენება სხვა პროდუქტზე — აირჩიეთ სხვა კოდი' });
+    }
+    res.status(400).json({ success:false, message: e.message });
+  }
 });
 
 // DELETE /api/products/:id (admin)
