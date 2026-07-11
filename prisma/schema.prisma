@@ -1197,3 +1197,11 @@ model ShipmentItem {
   @@index([orderItemId], map: "idx_shipment_items_order_item_id")
   @@map("shipment_items")
 }
+
+model VinCache {
+  vin          String   @id
+  responseData Json     @map("response_data")
+  createdAt    DateTime @default(now())
+
+  @@map("vin_cache")
+}

@@ -27,10 +27,19 @@ router.get('/decode', async (req, res) => {
       return res.status(200).json({ error: 'VIN-ში I, O, Q არ შეიძლება იყოს. შეამოწმე და ხელახლა შეიყვანე.', showManual: true, invalidFormat: true });
     }
 
-    // Autodoc VIN Decoder
-    const vinResolver = require('../services/vinResolver');
     const { PrismaClient } = require('@prisma/client');
     const prisma = new PrismaClient();
+    // jer ვამოწმებთ VIN cache-ს — ერთხელ დეკოდირებული VIN მყისიერად ბრუნდება,
+    // გარეშე API-ების (NHTSA/Autodoc) გარეშე
+    try {
+      const cached = await prisma.vinCache.findUnique({ where: { vin: vin.toUpperCase() } });
+      if (cached) {
+        await prisma.$disconnect();
+        return res.json({ ...cached.responseData, cached: true });
+      }
+    } catch (e) {}
+    // Autodoc VIN Decoder
+    const vinResolver = require('../services/vinResolver');
     const resolved = await vinResolver.resolveVIN(vin, prisma);
     let vehicleId = null;
     if (resolved) {
@@ -116,7 +125,17 @@ router.get('/decode', async (req, res) => {
         };
       } catch(e) {}
     }
-    res.json({ vehicle, confidence, confidenceLabel, confidenceColor, vehicleId, carImage, source: resolved.source, engineDetails });
+    const responsePayload = { vehicle, confidence, confidenceLabel, confidenceColor, vehicleId, carImage, source: resolved.source, engineDetails };
+    // ნებისმიერი წარმატებით დეკოდირებული VIN ვინახავთ cache-ში (confidence-ის მიუხედავად) —
+    // მიზანია გარეშე API-ების (NHTSA/Autodoc) ხელახლა არ დაძახება იმავე VIN-ისთვის
+    try {
+      await prisma.vinCache.upsert({
+        where: { vin: vin.toUpperCase() },
+        update: { responseData: responsePayload },
+        create: { vin: vin.toUpperCase(), responseData: responsePayload },
+      });
+    } catch (e) {}
+    res.json(responsePayload);
 
   } catch (e) {
     // VIN ვერ მოიძებნა — 200 status რომ frontend-ი error-ად არ ცნოს, manual form ჩაირთოს
