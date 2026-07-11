@@ -468,6 +468,7 @@ model ProductListing {
   nameEn             String?
   sku                String
   brand              String
+  barcode            String?
   price              Decimal             @db.Decimal(10, 2)
   stock              Int                 @default(0)
   images             String[]

@@ -87,7 +87,7 @@ router.post('/listings', authenticate, upload.none(), async (req, res) => {
     const supplier = await prisma.supplier.findUnique({ where: { userId: req.user.id } });
     if (!supplier) return res.status(404).json({ success: false, message: 'მომწოდებელი არ მოიძებნა' });
     if (supplier.status !== 'APPROVED') return res.status(403).json({ success: false, message: 'ანგარიში დამტკიცებული არ არის' });
-    const { nameKa, nameEn, sku, brand, price, stock, description, images, image0, image1, image2, categoryId, oem } = req.body;
+    const { nameKa, nameEn, sku, brand, price, stock, description, images, image0, image1, image2, categoryId, oem, barcode } = req.body;
     if (!nameKa || !sku || !brand || !price) return res.status(400).json({ success: false, message: 'შეავსეთ სავალდებულო ველები' });
     // image0/1/2 ან images array
     let imageArr = [];
@@ -106,6 +106,7 @@ router.post('/listings', authenticate, upload.none(), async (req, res) => {
         description: description || '',
         images: imageArr,
         oemCodes,
+        ...(barcode ? { barcode: String(barcode).trim() } : {}),
         autodocCategoryId: categoryId ? parseInt(categoryId) : null,
         status: 'PENDING',
       }
@@ -382,6 +383,7 @@ router.patch('/admin/listings/:id/status', authenticate, requireAdmin, async (re
             ...(l.oemCodes?.length ? { oemCodes: l.oemCodes } : {}),
             ...(l.categoryConfidence ? { categoryConfidence: l.categoryConfidence } : {}),
             ...(l.categoryMethod ? { categoryMethod: l.categoryMethod } : {}),
+            ...(l.barcode ? { barcode: l.barcode } : {}),
           },
           create: {
             nameKa: l.nameKa, nameEn: l.nameEn || l.nameKa,
@@ -393,6 +395,7 @@ router.patch('/admin/listings/:id/status', authenticate, requireAdmin, async (re
             autodocCategoryId: l.autodocCategoryId || null,
             categoryConfidence: l.categoryConfidence || null,
             categoryMethod: l.categoryMethod || null,
+            ...(l.barcode ? { barcode: l.barcode } : {}),
             isActive: true,
           }
         });
