@@ -12,12 +12,11 @@ router.get('/makes', async (req, res) => {
     const cached = await cache.get(cacheKey);
     if (cached) return res.json({ success: true, data: cached });
 
-    const raw = await autodoc.getManufacturersByType(1);
-    const manus = (raw?.manufacturers || []).map(m => ({
-      id: String(m.manufacturerId),
-      name: m.manufacturerName,
-      autodoc_id: m.manufacturerId,
-    }));
+    // ლოკალური vehicle_makes ცხრილიდან — Autodoc-ის ცოცხალი call-ის ნაცვლად
+    const rows = await prisma.$queryRaw`
+      SELECT id, name, autodoc_id, logo_url FROM vehicle_makes ORDER BY is_popular DESC, name ASC
+    `;
+    const manus = rows.map(m => ({ id: String(m.id), name: m.name, autodoc_id: m.autodoc_id, logo_url: m.logo_url }));
 
     await cache.set(cacheKey, manus, 86400);
     res.json({ success: true, data: manus });
@@ -36,19 +35,19 @@ router.get('/models', async (req, res) => {
     const cached = await cache.get(cacheKey);
     if (cached) return res.json({ success: true, data: cached });
 
-    const KEY = process.env.RAPIDAPI_KEY;
-    const HOST = 'autodoc-parts-catalog.p.rapidapi.com';
-    const r = await fetch(`https://${HOST}/api/models/list/type-id/1/manufacturer-id/${makeId}/lang-id/4/country-filter-id/63`, {
-      headers: { 'x-rapidapi-key': KEY, 'x-rapidapi-host': HOST }
-    });
-    const raw = await r.json();
-    const models = (raw?.models || raw || []).map(m => ({
-      id: String(m.modelId || m.id),
-      name: m.modelName || m.name,
-      yearFrom: m.yearOfConstructionFrom || null,
-      yearTo: m.yearOfConstructionTo || null,
-      autodoc_id: m.modelId || m.id,
-    })).sort((a, b) => (a.name||'').localeCompare(b.name||''));
+    // ლოკალური vehicle_models ცხრილიდან — Autodoc-ის ცოცხალი call-ის ნაცვლად
+    const modelRows = await prisma.$queryRaw`
+      SELECT id, name, "yearFrom", "yearTo", autodoc_model_id, image_url
+      FROM vehicle_models WHERE "makeId" = ${makeId} ORDER BY name ASC
+    `;
+    const models = modelRows.map(m => ({
+      id: String(m.id),
+      name: m.name,
+      yearFrom: m.yearFrom || null,
+      yearTo: m.yearTo || null,
+      autodoc_id: m.autodoc_model_id,
+      image_url: m.image_url,
+    }));
 
     await cache.set(cacheKey, models, 86400);
     res.json({ success: true, data: models });
@@ -67,23 +66,15 @@ router.get('/years', async (req, res) => {
     const cached = await cache.get(cacheKey);
     if (cached) return res.json({ success: true, data: cached });
 
-    // vehicles სია
-    const raw = await autodoc.getVehicleListByModel(modelId);
-    const types = raw?.modelTypes || [];
-    
-    // პირველი vehicle-ის details-დან წლები
+    // ლოკალური vehicle_models.yearFrom/yearTo-დან — Autodoc-ის ცოცხალი call-ის ნაცვლად
+    const modelRow = await prisma.$queryRaw`
+      SELECT "yearFrom", "yearTo" FROM vehicle_models WHERE id = ${modelId} LIMIT 1
+    `;
     const yearSet = new Set();
-    const sampleIds = [...new Set(types.map(v => v.vehicleId))].slice(0, 3);
-    for (const vid of sampleIds) {
-      try {
-        const det = await autodoc.getVehicleDetails(vid);
-        const d = det?.vehicleTypeDetails;
-        if (d?.constructionIntervalStart) {
-          const from = parseInt(d.constructionIntervalStart.substring(0,4));
-          const to = d.constructionIntervalEnd ? parseInt(d.constructionIntervalEnd.substring(0,4)) : new Date().getFullYear();
-          for (let y = to; y >= from; y--) yearSet.add(y);
-        }
-      } catch(e) {}
+    if (modelRow[0]) {
+      const from = modelRow[0].yearFrom || (new Date().getFullYear() - 20);
+      const to = modelRow[0].yearTo || new Date().getFullYear();
+      for (let y = to; y >= from; y--) yearSet.add(y);
     }
 
     const years = [...yearSet].sort((a,b) => b-a);
