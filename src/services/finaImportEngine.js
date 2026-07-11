@@ -42,6 +42,8 @@ const COLUMN_PROFILES = [
     getPrice: r => r['D — ფასი (₾)'],
     getBrand: r => r['E — ბრენდი'],
     getCategoryId: r => r['F — კატეგორია ID'],
+    // არჩევითი სვეტი — თუ Excel-ს ეს header არ აქვს, უბრალოდ null დაბრუნდება
+    getBarcode: r => r['G — შტრიხკოდი (Barcode)'] ?? null,
   },
   {
     // ბუნებრივი "სასაქონლო ნაშთები" ტიპის ERP-რეპორტი (FINA/1C-სტილის ექსპორტი)
@@ -53,6 +55,7 @@ const COLUMN_PROFILES = [
     getPrice: r => r['ერთეულის ფასი'], // არა "ჯამური ფასი" (რაოდენობაზე გამრავლებული)
     getBrand: r => null,
     getCategoryId: r => null,
+    getBarcode: r => r['შტრიხკოდი'] ?? r['Barcode'] ?? r['ბარკოდი'] ?? null,
   },
 ];
 
@@ -129,12 +132,15 @@ async function processFinaExcel(buffer, { markup = 0 } = {}) {
     const categoryIdRaw = profile.getCategoryId(row);
     const categoryIdFromExcel = parseInt(categoryIdRaw || '0') || null;
 
+    const rawBarcode = String(profile.getBarcode ? (profile.getBarcode(row) ?? '') : '').trim();
+
     return {
       sku, nameKa,
       nameEn: nameKa,
       nameRu: nameKa,
       price, stock,
       brand,
+      barcode: rawBarcode || null,
       _brandFromE: !!brandFromProfile,
       oemCodes: oemCodes.length ? oemCodes : [],
       alternativeSearchKeys: oemCodes.length ? oemCodes : undefined,

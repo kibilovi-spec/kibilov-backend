@@ -473,6 +473,7 @@ async function __runFinaImportBackground(fileInputs) {
           categoryConfidence: row.categoryConfidence || null,
           categoryMethod: row.categoryMethod || null,
           ...(row.oemCodes?.length ? { oemCodes: row.oemCodes, alternativeSearchKeys: row.alternativeSearchKeys } : {}),
+          ...(row.barcode ? { barcode: row.barcode } : {}),
         };
         if (ex) {
           await prisma.product.update({ where: { id: ex.id }, data });
