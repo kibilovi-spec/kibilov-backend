@@ -247,16 +247,15 @@ adminRouter.post('/products/import', upload.single('file'), async (req, res) => 
     });
     const existingMap = new Map(existing.map(e => [e.sku, e.id]));
 
-    // duplicate SKU → rename with brand suffix, save both
+    // არსებული SKU → განახლება (არა დუბლიკატის შექმნა — ეს ადრე დაწერილი იყო,
+    // მაგრამ toUpdate არასდროს ივსებოდა, ამიტომ ყოველი ხელახალი import ქმნიდა
+    // ახალ დუბლიკატს ყოველი უკვე-არსებული SKU-სთვის)
     const toUpdate = [];
-    const toCreate = normalized.map(r => {
-      if (existingMap.has(r.sku)) {
-        const brandSuffix = (r.brand && r.brand !== 'Generic') ? r.brand.toUpperCase().replace(/\s+/g, '-') : '2';
-        const newSku = r.sku + '-' + brandSuffix;
-        return { ...r, sku: newSku, nameKa: r.nameKa + ' [დუბლ: ' + r.sku + ']' };
-      }
-      return r;
-    });
+    const toCreate = [];
+    for (const r of normalized) {
+      if (existingMap.has(r.sku)) toUpdate.push(r);
+      else toCreate.push(r);
+    }
 
     // batch update — chunks of 100
     let updated = 0;
@@ -271,7 +270,8 @@ adminRouter.post('/products/import', upload.single('file'), async (req, res) => 
           data: {
             nameKa: r.nameKa, price: r.price, stock: r.stock,
             brand: r.brand !== 'Generic' ? r.brand : undefined,
-            ...(r.oemCodes?.length ? { oemCodes: r.oemCodes, alternativeSearchKeys: r.alternativeSearchKeys } : {})
+            ...(r.oemCodes?.length ? { oemCodes: r.oemCodes, alternativeSearchKeys: r.alternativeSearchKeys } : {}),
+            ...(r.barcode ? { barcode: r.barcode } : {})
           }
         }))
       );
