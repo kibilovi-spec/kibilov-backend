@@ -1201,16 +1201,41 @@ router.get('/article-oem/:articleId', async (req, res) => {
   } catch(e) { console.error('[autodoc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
-// GET /api/autodoc/find-product?oem=GDB4605
+// GET /api/autodoc/find-product?oem=GDB4605  (ან barcode/SKU)
 router.get('/find-product', async (req, res) => {
   const { oem } = req.query;
   if (!oem) return res.status(400).json({ error: 'oem required' });
+  const code = String(oem).trim();
+  const codeNorm = code.replace(/[\s\-]/g, '').toUpperCase();
+
+  // 1) jer საკუთარ DB-ში ვეძებთ — ბარკოდი, SKU, ან OEM კოდი
   try {
-    // AUTODOC-ში ვეძებთ
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    const local = await prisma.product.findFirst({
+      where: {
+        isActive: true,
+        OR: [
+          { barcode: code },
+          { sku: { equals: code, mode: 'insensitive' } },
+          { articleNumber: { equals: code, mode: 'insensitive' } },
+          { oemCodes: { has: code } },
+          { oemCodes: { has: codeNorm } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (local) {
+      return res.json({ found: true, product: { id: local.id } });
+    }
+  } catch (e) { console.error('[find-product] local DB search error:', e.message); }
+
+  // 2) ვერ ვიპოვეთ ლოკალურად — ცოცხალი Autodoc fallback
+  try {
     let arts = [];
-    for (const atype of ['ArticleNumber', 'OENumber']) {
+    for (const atype of ['ArticleNumber', 'OENumber', 'EAN']) {
       await new Promise(r => setTimeout(r, 300));
-      const r = await fetch(`${BASE}/api/artlookup/search-articles-by-article-no?langId=4&articleNo=${encodeURIComponent(oem)}&articleType=${atype}`, { headers: headers() });
+      const r = await fetch(`${BASE}/api/artlookup/search-articles-by-article-no?langId=4&articleNo=${encodeURIComponent(code)}&articleType=${atype}`, { headers: headers() });
       const d = await r.json();
       arts = d.articles || (Array.isArray(d) ? d : []);
       if (arts.length) break;
@@ -1222,8 +1247,8 @@ router.get('/find-product', async (req, res) => {
       supplierName: a.supplierName,
       s3image: a.s3image || null,
     }));
-    res.json({ articles, total: articles.length });
-  } catch(e) { res.status(500).json({ error: e.message, articles: [] }); }
+    res.json({ found: false, articles, total: articles.length });
+  } catch(e) { res.json({ found: false, articles: [], error: e.message }); }
 });
 
 // GET /api/autodoc/articles?categoryId=100005&vehicleId=12487(optional)
