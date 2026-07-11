@@ -156,7 +156,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const order = await prisma.order.findUnique({
     where: { id: req.params.id },
-    include: { items: { include: { product: true }}, user: { select: { name:true, email:true, phone:true }}, address: true }
+    include: { items: { include: { product: true }}, user: { select: { name:true, email:true, phone:true }}, address: true, shipments: true }
   });
   if (!order) return res.status(404).json({ success: false, message: 'შეკვეთა არ მოიძებნა' });
   if (req.user.role === 'USER' && order.userId !== req.user.id)
