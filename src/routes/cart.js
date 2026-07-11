@@ -59,6 +59,24 @@ function getReservationMinutes(user) {
   return 10;
 }
 
+// რეალურად ხელმისაწვდომი მარაგი — ფიზიკური stock მინუს აქტიური (ვადაგაუვლელი,
+// დაუდასტურებელი) ჯავშნები. excludeReservationId — თუ ვანახლებთ არსებულ
+// ჯავშანს, მისი საკუთარი ძველი qty არ უნდა ჩაითვალოს "სხვისად დაკავებულად"
+async function getAvailableStock(productId, excludeReservationId = null) {
+  const product = await prisma.product.findUnique({ where: { id: productId }, select: { stock: true } });
+  if (!product) return 0;
+  const reserved = await prisma.stockReservation.aggregate({
+    where: {
+      productId,
+      confirmed: false,
+      expiresAt: { gt: new Date() },
+      ...(excludeReservationId ? { id: { not: excludeReservationId } } : {}),
+    },
+    _sum: { qty: true },
+  });
+  return product.stock - (reserved._sum.qty || 0);
+}
+
 // POST /api/cart  (add item)
 router.post('/', async (req, res) => {
   try {
@@ -67,17 +85,29 @@ router.post('/', async (req, res) => {
 
     const product = await prisma.product.findUnique({ where: { id: productId } });
     if (!product || !product.isActive) return res.status(404).json({ success: false, message: 'პროდუქტი არ მოიძებნა' });
-    if (product.stock < qty) return res.status(422).json({ success: false, message: `მარაგში ${product.stock} ცალია` });
 
     const cart = await getOrCreateCart(req.user.id);
     const existing = cart.items.find(i => i.productId === productId);
+    const dbUser = await prisma.user.findUnique({ where: { id: req.user.id }, select: { b2bTier: true } });
+    const ttlMinutes = getReservationMinutes(dbUser);
+    const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
 
     if (existing) {
       const newQty = existing.qty + qty;
-      if (newQty > product.stock) return res.status(422).json({ success: false, message: `მარაგში მხოლოდ ${product.stock} ცალია` });
+      const existingRes = await prisma.stockReservation.findFirst({ where: { cartItemId: existing.id, confirmed: false } });
+      const available = await getAvailableStock(productId, existingRes?.id || null);
+      if (newQty > available) return res.status(422).json({ success: false, message: `მარაგში მხოლოდ ${available} ცალია ხელმისაწვდომი` });
       await prisma.cartItem.update({ where: { id: existing.id }, data: { qty: newQty } });
+      if (existingRes) {
+        await prisma.stockReservation.update({ where: { id: existingRes.id }, data: { qty: newQty, expiresAt, userTier: dbUser?.b2bTier || null } });
+      } else {
+        await prisma.stockReservation.create({ data: { productId, cartItemId: existing.id, qty: newQty, expiresAt, userTier: dbUser?.b2bTier || null } });
+      }
     } else {
-      await prisma.cartItem.create({ data: { cartId: cart.id, productId, qty } });
+      const available = await getAvailableStock(productId);
+      if (qty > available) return res.status(422).json({ success: false, message: `მარაგში ${available} ცალია ხელმისაწვდომი` });
+      const newItem = await prisma.cartItem.create({ data: { cartId: cart.id, productId, qty } });
+      await prisma.stockReservation.create({ data: { productId, cartItemId: newItem.id, qty, expiresAt, userTier: dbUser?.b2bTier || null } });
       // Analytics: cart_added
       try {
         // analyticsId passed from frontend
@@ -102,10 +132,22 @@ router.put('/:productId', async (req, res) => {
     const item = cart.items.find(i => i.productId === req.params.productId);
     if (!item) return res.status(404).json({ success: false, message: 'ნაწილი კალათში არ არის' });
 
+    const existingRes = await prisma.stockReservation.findFirst({ where: { cartItemId: item.id, confirmed: false } });
+
     if (qty <= 0) {
       await prisma.cartItem.delete({ where: { id: item.id } });
+      if (existingRes) await prisma.stockReservation.delete({ where: { id: existingRes.id } }).catch(() => {});
     } else {
+      const available = await getAvailableStock(req.params.productId, existingRes?.id || null);
+      if (qty > available) return res.status(422).json({ success: false, message: `მარაგში მხოლოდ ${available} ცალია ხელმისაწვდომი` });
       await prisma.cartItem.update({ where: { id: item.id }, data: { qty } });
+      const dbUser = await prisma.user.findUnique({ where: { id: req.user.id }, select: { b2bTier: true } });
+      const expiresAt = new Date(Date.now() + getReservationMinutes(dbUser) * 60 * 1000);
+      if (existingRes) {
+        await prisma.stockReservation.update({ where: { id: existingRes.id }, data: { qty, expiresAt } });
+      } else {
+        await prisma.stockReservation.create({ data: { productId: req.params.productId, cartItemId: item.id, qty, expiresAt, userTier: dbUser?.b2bTier || null } });
+      }
     }
     const updated = await getOrCreateCart(req.user.id);
     res.json({ success: true, data: enrichCart(updated, req.query.lang) });
@@ -117,7 +159,10 @@ router.delete('/:productId', async (req, res) => {
   try {
     const cart = await getOrCreateCart(req.user.id);
     const item = cart.items.find(i => i.productId === req.params.productId);
-    if (item) await prisma.cartItem.delete({ where: { id: item.id } });
+    if (item) {
+      await prisma.stockReservation.deleteMany({ where: { cartItemId: item.id } });
+      await prisma.cartItem.delete({ where: { id: item.id } });
+    }
     const updated = await getOrCreateCart(req.user.id);
     res.json({ success: true, data: enrichCart(updated, req.query.lang) });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -127,6 +172,8 @@ router.delete('/:productId', async (req, res) => {
 router.delete('/', async (req, res) => {
   try {
     const cart = await getOrCreateCart(req.user.id);
+    const itemIds = cart.items.map(i => i.id);
+    if (itemIds.length) await prisma.stockReservation.deleteMany({ where: { cartItemId: { in: itemIds } } });
     await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
     const updated = await getOrCreateCart(req.user.id);
     res.json({ success: true, data: enrichCart(updated) });

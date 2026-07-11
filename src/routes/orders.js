@@ -87,6 +87,11 @@ router.post('/', async (req, res) => {
         include: { items: true },
       });
 
+      // ჯავშნების გასუფთავება — რეალური stock უკვე შემცირდა ზემოთ, აღარ სჭირდება ჯავშანი
+      const cartItemIds = cart.items.map(i => i.id);
+      if (cartItemIds.length) {
+        await tx.stockReservation.deleteMany({ where: { cartItemId: { in: cartItemIds } } });
+      }
       // Clear cart
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
 
