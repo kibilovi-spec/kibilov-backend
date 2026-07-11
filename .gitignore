@@ -13,3 +13,9 @@ uploads/
 *.bak_*
 .env.bak.*
 scripts/*.checkpoint.json
+*.bak
+*.bak.*
+*.bak2*
+*.bak3*
+*.bak4*
+*.bak_*
