@@ -90,6 +90,7 @@ model Product {
   sku                   String              @unique
   barcode               String?             @unique
   weightCategory        String              @default("SMALL")
+  dataLocked            Boolean             @default(false)
   brand                 String
   nameKa                String
   nameEn                String              @default("")

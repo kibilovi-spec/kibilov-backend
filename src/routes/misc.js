@@ -243,9 +243,9 @@ adminRouter.post('/products/import', upload.single('file'), async (req, res) => 
     const skus = normalized.map(r => r.sku);
     const existing = await prisma.product.findMany({
       where: { sku: { in: skus } },
-      select: { id: true, sku: true }
+      select: { id: true, sku: true, dataLocked: true }
     });
-    const existingMap = new Map(existing.map(e => [e.sku, e.id]));
+    const existingMap = new Map(existing.map(e => [e.sku, e]));
 
     // არსებული SKU → განახლება (არა დუბლიკატის შექმნა — ეს ადრე დაწერილი იყო,
     // მაგრამ toUpdate არასდროს ივსებოდა, ამიტომ ყოველი ხელახალი import ქმნიდა
@@ -265,15 +265,22 @@ adminRouter.post('/products/import', upload.single('file'), async (req, res) => 
     for (let i = 0; i < toUpdate.length; i += CHUNK) {
       const chunk = toUpdate.slice(i, i + CHUNK);
       await prisma.$transaction(
-        chunk.map(r => prisma.product.update({
-          where: { id: existingMap.get(r.sku) },
-          data: {
-            nameKa: r.nameKa, price: r.price, stock: r.stock,
-            brand: r.brand !== 'Generic' ? r.brand : undefined,
-            ...(r.oemCodes?.length ? { oemCodes: r.oemCodes, alternativeSearchKeys: r.alternativeSearchKeys } : {}),
-            ...(r.barcode ? { barcode: r.barcode } : {})
-          }
-        }))
+        chunk.map(r => {
+          const ex = existingMap.get(r.sku);
+          // 🔒 თუ პროდუქტი ხელით არის შესწორებული (dataLocked), ბრენდსა
+          // და OEM/ბარკოდს აღარ ვეხებით — მხოლოდ ფასი/მარაგი განახლდება
+          return prisma.product.update({
+            where: { id: ex.id },
+            data: {
+              nameKa: r.nameKa, price: r.price, stock: r.stock,
+              ...(ex.dataLocked ? {} : {
+                brand: r.brand !== 'Generic' ? r.brand : undefined,
+                ...(r.oemCodes?.length ? { oemCodes: r.oemCodes, alternativeSearchKeys: r.alternativeSearchKeys } : {}),
+                ...(r.barcode ? { barcode: r.barcode } : {})
+              })
+            }
+          });
+        })
       );
       updated += chunk.length;
     }
@@ -466,14 +473,20 @@ async function __runFinaImportBackground(fileInputs) {
         const ex = await prisma.product.findFirst({ where: { sku: row.sku } });
         const price = row.price;
         const b2bPrice = price >= 500 ? parseFloat((price * 0.85).toFixed(2)) : parseFloat((price * 0.90).toFixed(2));
+        // 🔒 თუ პროდუქტი ხელით არის შესწორებული (dataLocked), ბრენდსა და
+        // OEM/ბარკოდს/კატეგორიას აღარ ვეხებით — მხოლოდ ფასი/მარაგი განახლდება
+        const isLocked = ex?.dataLocked === true;
         const data = {
           nameKa: row.nameKa, nameEn: row.nameEn, nameRu: row.nameRu,
-          price, stock: row.stock, b2bPrice, brand: row.brand || 'Generic',
-          autodocCategoryId: row.autodocCategoryId || null,
-          categoryConfidence: row.categoryConfidence || null,
-          categoryMethod: row.categoryMethod || null,
-          ...(row.oemCodes?.length ? { oemCodes: row.oemCodes, alternativeSearchKeys: row.alternativeSearchKeys } : {}),
-          ...(row.barcode ? { barcode: row.barcode } : {}),
+          price, stock: row.stock, b2bPrice,
+          ...(isLocked ? {} : {
+            brand: row.brand || 'Generic',
+            autodocCategoryId: row.autodocCategoryId || null,
+            categoryConfidence: row.categoryConfidence || null,
+            categoryMethod: row.categoryMethod || null,
+            ...(row.oemCodes?.length ? { oemCodes: row.oemCodes, alternativeSearchKeys: row.alternativeSearchKeys } : {}),
+            ...(row.barcode ? { barcode: row.barcode } : {}),
+          }),
         };
         if (ex) {
           await prisma.product.update({ where: { id: ex.id }, data });
