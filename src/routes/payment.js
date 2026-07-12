@@ -1,11 +1,34 @@
 'use strict';
 const express = require('express');
 const axios   = require('axios');
+const crypto  = require('crypto');
 const CloudIpsp = require('cloudipsp-node-js-sdk');
 const { PrismaClient } = require('@prisma/client');
 const { authenticate } = require('../middleware/auth');
 const router  = express.Router();
 const prisma  = new PrismaClient();
+
+// 🔒 Flitt-ის ხელმოწერის ვერიფიკაცია — იგივე SHA1 ალგორითმი, რასაც SDK იყენებს
+// (secret_key + '|' + დალაგებული ველების მნიშვნელობები), მაგრამ შედარება
+// timing-safe მეთოდით (crypto.timingSafeEqual), ჩვეულებრივი === -ის ნაცვლად.
+// ეს დამატებით (defense-in-depth) ცვლის SDK-ს isValidResponse-ს, node_modules-ის
+// შეხების გარეშე (რომელიც დაიკარგებოდა npm install-ზე).
+function verifyFlittSignatureTimingSafe(data, secret) {
+  if (!data || !data.signature || !data.merchant_id) return false;
+  const ordered = {};
+  Object.keys(data).sort().forEach((key) => {
+    if (data[key] !== '' && key !== 'signature' && key !== 'response_signature_string') {
+      ordered[key] = data[key];
+    }
+  });
+  const signString = secret + '|' + Object.values(ordered).join('|');
+  const calculated = crypto.createHash('sha1').update(signString).digest('hex');
+
+  const a = Buffer.from(String(data.signature), 'utf8');
+  const b = Buffer.from(calculated, 'utf8');
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
 
 // ─── Flitt Payment (active — primary payment method) ──────────────────────────
 const flitt = new CloudIpsp({
@@ -47,7 +70,7 @@ router.post('/flitt/callback', async (req, res) => {
   try {
     const data = req.body;
 
-    if (!flitt.isValidResponse(data)) {
+    if (!verifyFlittSignatureTimingSafe(data, process.env.FLITT_SECRET_KEY)) {
       console.error('[Flitt Callback] Invalid signature — possible fraud attempt', data.order_id);
       return res.status(400).send('Invalid signature');
     }
