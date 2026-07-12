@@ -38,15 +38,19 @@ router.post('/products', authSupplier, async (req, res) => {
         const existing = await prisma.product.findUnique({ where: { sku: p.sku } });
 
         if (existing) {
+          // 🔒 თუ პროდუქტი ხელით არის შესწორებული (dataLocked), კატეგორიას
+          // აღარ ვეხებით — მხოლოდ ფასი/მარაგი განახლდება
           await prisma.product.update({
             where: { sku: p.sku },
             data: {
               price: parseFloat(p.price) || existing.price,
               stock: parseInt(p.stock) || 0,
               isActive: (parseInt(p.stock) || 0) > 0,
-              autodocCategoryId: match.confidence >= 70 ? match.categoryId : existing.autodocCategoryId,
-              categoryConfidence: match.confidence || existing.categoryConfidence,
-              categoryMethod: match.method || existing.categoryMethod
+              ...(existing.dataLocked ? {} : {
+                autodocCategoryId: match.confidence >= 70 ? match.categoryId : existing.autodocCategoryId,
+                categoryConfidence: match.confidence || existing.categoryConfidence,
+                categoryMethod: match.method || existing.categoryMethod,
+              }),
             }
           });
           results.updated++;

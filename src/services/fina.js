@@ -93,9 +93,18 @@ async function syncFromFina() {
 
       const exists = await prisma.product.findUnique({ where: { finaId: productData.finaId } });
       if (exists) {
+        // 🔒 თუ პროდუქტი ხელით არის შესწორებული (dataLocked), OEM-კოდებს/
+        // საძიებო-სინონიმებს აღარ ვეხებით — მხოლოდ ფასი/მარაგი/სახელი განახლდება
         await prisma.product.update({
           where: { finaId: productData.finaId },
-          data: { stock: productData.stock, price: productData.price, nameKa: productData.nameKa, normalizedSku: normalizeKey(productData.sku), alternativeSearchKeys: enrichWithSynonyms(productData.nameKa, []), oemCodes: parseOemCodesFromName(productData.nameKa) }
+          data: {
+            stock: productData.stock, price: productData.price, nameKa: productData.nameKa,
+            normalizedSku: normalizeKey(productData.sku),
+            ...(exists.dataLocked ? {} : {
+              alternativeSearchKeys: enrichWithSynonyms(productData.nameKa, []),
+              oemCodes: parseOemCodesFromName(productData.nameKa),
+            }),
+          }
         });
         itemsUpdated++;
       } else {

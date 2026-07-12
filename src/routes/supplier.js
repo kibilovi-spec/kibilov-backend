@@ -375,15 +375,21 @@ router.patch('/admin/listings/:id/status', authenticate, requireAdmin, async (re
     // APPROVED — products table-ში ჩავწეროთ
     if (status === 'APPROVED') {
       try {
+        // 🔒 თუ ეს SKU უკვე არსებობს და ხელით არის შესწორებული (dataLocked),
+        // კატეგორია/OEM/ბარკოდს აღარ ვეხებით — მხოლოდ ფასი/მარაგი განახლდება
+        const existingBySku = await prisma.product.findUnique({ where: { sku: l.sku }, select: { dataLocked: true } });
+        const isLocked = existingBySku?.dataLocked === true;
         const product = await prisma.product.upsert({
           where: { sku: l.sku },
           update: {
             price: l.price, stock: l.stock, isActive: true,
-            ...(l.autodocCategoryId ? { autodocCategoryId: l.autodocCategoryId } : {}),
-            ...(l.oemCodes?.length ? { oemCodes: l.oemCodes } : {}),
-            ...(l.categoryConfidence ? { categoryConfidence: l.categoryConfidence } : {}),
-            ...(l.categoryMethod ? { categoryMethod: l.categoryMethod } : {}),
-            ...(l.barcode ? { barcode: l.barcode } : {}),
+            ...(isLocked ? {} : {
+              ...(l.autodocCategoryId ? { autodocCategoryId: l.autodocCategoryId } : {}),
+              ...(l.oemCodes?.length ? { oemCodes: l.oemCodes } : {}),
+              ...(l.categoryConfidence ? { categoryConfidence: l.categoryConfidence } : {}),
+              ...(l.categoryMethod ? { categoryMethod: l.categoryMethod } : {}),
+              ...(l.barcode ? { barcode: l.barcode } : {}),
+            }),
           },
           create: {
             nameKa: l.nameKa, nameEn: l.nameEn || l.nameKa,
