@@ -371,6 +371,70 @@ adminRouter.post('/upload-image', uploadImg.single('image'), async (req, res) =>
   } catch(e) { console.error('[misc.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
+// POST /api/admin/bulk-image-upload — ფოლდერით სურათების ატვირთვა, SKU-ს მიხედვით
+// ავტომატური დაკავშირება პროდუქტთან. ფაილის სახელი = SKU (+ არჩევითი "_2","-3"
+// და ა.შ. სუფიქსი მრავალი სურათისთვის). jer ზუსტ SKU-დამთხვევას ვცდით,
+// რომ დეფისიანი SKU-ები (მაგ. L1063-900) არასწორად არ დაიჭრას.
+const bulkImg = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5242880 } });
+async function findProductForFilename(prisma, base) {
+  let product = await prisma.product.findFirst({ where: { sku: { equals: base, mode: 'insensitive' } } });
+  if (product) return product;
+  const stripped = base.replace(/[_\-]\s?\d{1,2}$/, '');
+  if (stripped !== base) {
+    product = await prisma.product.findFirst({ where: { sku: { equals: stripped, mode: 'insensitive' } } });
+    if (product) return product;
+  }
+  return null;
+}
+adminRouter.post('/bulk-image-upload', bulkImg.array('images', 500), async (req, res) => {
+  try {
+    if (!req.files || !req.files.length) return res.status(400).json({ error: 'ფაილები არ არის' });
+    const cloudinary = require('cloudinary').v2;
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+
+    // ჯერ თითოეულ ფაილს ვუკავშირებთ პროდუქტს (ან ვნიშნავთ, ვერ მოიძებნა)
+    const byProduct = new Map(); // productId -> { product, files: [] }
+    const unmatched = [];
+    for (const file of req.files) {
+      const base = file.originalname.replace(/\.[^.]+$/, '').trim();
+      const product = await findProductForFilename(prisma, base);
+      if (!product) { unmatched.push(file.originalname); continue; }
+      if (!byProduct.has(product.id)) byProduct.set(product.id, { product, files: [] });
+      byProduct.get(product.id).files.push(file);
+    }
+
+    const matched = [];
+    const errors = [];
+    for (const { product, files } of byProduct.values()) {
+      const urls = [];
+      for (const file of files) {
+        try {
+          const result = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream({ folder: 'kibilov/products' }, (error, result) => error ? reject(error) : resolve(result));
+            stream.end(file.buffer);
+          });
+          urls.push(result.secure_url);
+        } catch (e) { errors.push(`${product.sku}: ${e.message}`); }
+      }
+      if (urls.length) {
+        const existingImages = product.images || [];
+        const newImages = [...existingImages, ...urls].slice(0, 5);
+        await prisma.product.update({ where: { id: product.id }, data: { images: newImages } });
+        matched.push({ sku: product.sku, nameKa: product.nameKa, count: urls.length });
+      }
+    }
+
+    res.json({ success: true, matched, unmatched, errors, totalFiles: req.files.length });
+  } catch (e) {
+    console.error('[misc.js bulk-image-upload]', e);
+    res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' });
+  }
+});
+
 // POST /api/admin/fina-import
 adminRouter.post('/fina-import', async (req, res) => {
   try {
