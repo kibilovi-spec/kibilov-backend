@@ -1101,6 +1101,7 @@ enum PaymentMethod {
   CASH
   BOG
   TBC
+  FLITT
 }
 
 enum PaymentStatus {
