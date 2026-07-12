@@ -34,6 +34,7 @@ const fmtProduct = (p, lang = 'ka') => ({
   oemCodes:      p.oemCodes || [],
   alternativeSearchKeys: p.alternativeSearchKeys || [],
   autodocCategoryId: p.autodocCategoryId || null,
+  dataLocked:    p.dataLocked || false,
   category:      p.category ? {
     id: p.category.id, slug: p.category.slug,
     name: p.category[`name${lang.charAt(0).toUpperCase()+lang.slice(1)}`] || p.category.nameKa,
@@ -711,12 +712,13 @@ router.get('/:id/listings', async (req, res) => {
 // PUT /api/products/:id (admin)
 router.put('/:id', authenticate, requireAdmin, async (req, res) => {
   try {
-    const { sku, nameKa, nameEn, nameRu, brand, articleNumber, price, stock, description, isActive, images, autodocCategoryId } = req.body;
+    const { sku, nameKa, nameEn, nameRu, brand, articleNumber, price, stock, description, isActive, images, autodocCategoryId, dataLocked } = req.body;
     const updateData = {};
     if (sku !== undefined && sku !== null && sku.trim() !== '') updateData.sku = sku.trim();
-    // ხელით რედაქტირება ავტომატურად "იბლოკავს" ბრენდს/OEM-ს მომავალი
-    // ავტომატური FINA re-import-ისგან — მომხმარებლის მიერ მოთხოვნილი დაცვა
-    updateData.dataLocked = true;
+    // ხელით რედაქტირება default-ად "იბლოკავს" ბრენდს/OEM-ს მომავალი ავტომატური
+    // FINA re-import-ისგან — მაგრამ თუ frontend ცხადად აგზავნის dataLocked-ს
+    // (checkbox-ის მეშვეობით), ამ არჩევანს ვცემთ პატივს — ასე შესაძლებელია განბლოკვაც
+    updateData.dataLocked = dataLocked !== undefined ? !!dataLocked : true;
     if (nameKa !== undefined) updateData.nameKa = nameKa;
     if (nameEn !== undefined) updateData.nameEn = nameEn;
     if (nameRu !== undefined) updateData.nameRu = nameRu;
