@@ -16,10 +16,18 @@ async function getOrCreateCart(userId) {
   });
 }
 
-function enrichCart(cart, lang = 'ka') {
-  const items = cart.items
-    .filter(i => i.product && i.product.isActive)
-    .map(item => {
+async function enrichCart(cart, lang = 'ka') {
+  const activeItems = cart.items.filter(i => i.product && i.product.isActive);
+  const itemIds = activeItems.map(i => i.id);
+  const reservations = itemIds.length
+    ? await prisma.stockReservation.findMany({
+        where: { cartItemId: { in: itemIds }, confirmed: false },
+        select: { cartItemId: true, expiresAt: true },
+      })
+    : [];
+  const expiresMap = new Map(reservations.map(r => [r.cartItemId, r.expiresAt]));
+
+  const items = activeItems.map(item => {
       const p = item.product;
       const name = lang === 'en' ? (p.nameEn || p.nameKa) : lang === 'ru' ? (p.nameRu || p.nameKa) : p.nameKa;
       return {
@@ -34,6 +42,7 @@ function enrichCart(cart, lang = 'ka') {
         stockLeft: p.stock,
         quantity: item.qty,   // ← always expose as `quantity` for frontend
         lineTotal: Number(p.price) * item.qty,
+        reservedUntil: expiresMap.get(item.id) || null,
       };
     });
 
@@ -46,7 +55,7 @@ function enrichCart(cart, lang = 'ka') {
 router.get('/', async (req, res) => {
   try {
     const cart = await getOrCreateCart(req.user.id);
-    res.json({ success: true, data: enrichCart(cart, req.query.lang) });
+    res.json({ success: true, data: await enrichCart(cart, req.query.lang) });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
@@ -119,7 +128,7 @@ router.post('/', async (req, res) => {
     }
 
     const updated = await getOrCreateCart(req.user.id);
-    res.json({ success: true, message: 'კალათაში დაემატა', data: enrichCart(updated, req.query.lang) });
+    res.json({ success: true, message: 'კალათაში დაემატა', data: await enrichCart(updated, req.query.lang) });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
@@ -150,7 +159,7 @@ router.put('/:productId', async (req, res) => {
       }
     }
     const updated = await getOrCreateCart(req.user.id);
-    res.json({ success: true, data: enrichCart(updated, req.query.lang) });
+    res.json({ success: true, data: await enrichCart(updated, req.query.lang) });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
@@ -164,7 +173,7 @@ router.delete('/:productId', async (req, res) => {
       await prisma.cartItem.delete({ where: { id: item.id } });
     }
     const updated = await getOrCreateCart(req.user.id);
-    res.json({ success: true, data: enrichCart(updated, req.query.lang) });
+    res.json({ success: true, data: await enrichCart(updated, req.query.lang) });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
@@ -176,7 +185,7 @@ router.delete('/', async (req, res) => {
     if (itemIds.length) await prisma.stockReservation.deleteMany({ where: { cartItemId: { in: itemIds } } });
     await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
     const updated = await getOrCreateCart(req.user.id);
-    res.json({ success: true, data: enrichCart(updated) });
+    res.json({ success: true, data: await enrichCart(updated) });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
