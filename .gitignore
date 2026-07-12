@@ -19,3 +19,4 @@ scripts/*.checkpoint.json
 *.bak3*
 *.bak4*
 *.bak_*
+scripts/.flitt-activated.flag
