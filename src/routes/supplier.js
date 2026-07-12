@@ -159,6 +159,67 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
   } catch(e) { console.error('[supplier.js]', e); res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' }); }
 });
 
+// POST /api/supplier/bulk-image-upload — ფოლდერით სურათების ატვირთვა, SKU-ს
+// მიხედვით (ფაილის სახელი = SKU). მხოლოდ ამ supplier-ის საკუთარ listing-ებზე.
+async function findListingForFilename(prisma, supplierId, base) {
+  let listing = await prisma.productListing.findFirst({ where: { supplierId, sku: { equals: base, mode: 'insensitive' } } });
+  if (listing) return listing;
+  const stripped = base.replace(/[_\-]\s?\d{1,2}$/, '');
+  if (stripped !== base) {
+    listing = await prisma.productListing.findFirst({ where: { supplierId, sku: { equals: stripped, mode: 'insensitive' } } });
+    if (listing) return listing;
+  }
+  return null;
+}
+router.post('/bulk-image-upload', authenticate, upload.array('images', 500), async (req, res) => {
+  try {
+    const supplier = await prisma.supplier.findUnique({ where: { userId: req.user.id } });
+    if (!supplier) return res.status(403).json({ success: false, message: 'მომწოდებელი არ ხარ' });
+    if (!req.files || !req.files.length) return res.status(400).json({ success: false, message: 'ფაილები არ არის' });
+
+    const cloudinary = require('cloudinary').v2;
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+
+    const byListing = new Map();
+    const unmatched = [];
+    for (const file of req.files) {
+      const base = file.originalname.replace(/\.[^.]+$/, '').trim();
+      const listing = await findListingForFilename(prisma, supplier.id, base);
+      if (!listing) { unmatched.push(file.originalname); continue; }
+      if (!byListing.has(listing.id)) byListing.set(listing.id, { listing, files: [] });
+      byListing.get(listing.id).files.push(file);
+    }
+
+    const matched = [];
+    const errors = [];
+    for (const { listing, files } of byListing.values()) {
+      const urls = [];
+      for (const file of files) {
+        try {
+          const result = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream({ folder: 'kibilov/products' }, (error, result) => error ? reject(error) : resolve(result));
+            stream.end(file.buffer);
+          });
+          urls.push(result.secure_url);
+        } catch (e) { errors.push(`${listing.sku}: ${e.message}`); }
+      }
+      if (urls.length) {
+        const newImages = [...(listing.images || []), ...urls].slice(0, 5);
+        await prisma.productListing.update({ where: { id: listing.id }, data: { images: newImages } });
+        matched.push({ sku: listing.sku, nameKa: listing.nameKa, count: urls.length });
+      }
+    }
+
+    res.json({ success: true, matched, unmatched, errors, totalFiles: req.files.length });
+  } catch (e) {
+    console.error('[supplier.js bulk-image-upload]', e);
+    res.status(500).json({ error: 'სერვერზე დაფიქსირდა შეცდომა, გთხოვთ სცადოთ მოგვიანებით' });
+  }
+});
 // POST /api/supplier/validate — Feed Validator: ამოწმებს ფაილს რეალურ import-ამდე, DB-ში არაფერს წერს
 router.post('/validate', authenticate, upload.single('file'), async (req, res) => {
   try {
