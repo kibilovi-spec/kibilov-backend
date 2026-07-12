@@ -16,8 +16,19 @@ async function getArticleId(sku) {
     const clean = sku.replace(/\s+/g, '');
     const r = await fetch(`${BASE}/api/artlookup/search-articles-by-article-no?langId=4&articleNo=${encodeURIComponent(clean)}&articleType=ArticleNumber`, { headers });
     const d = await r.json();
-    return (d.articles || [])[0]?.articleId || null;
+    const art = (d.articles || [])[0];
+    if (!art) return null;
+    return { articleId: art.articleId, supplierName: art.supplierName || '' };
   } catch { return null; }
+}
+// SKU-ს ავტოდეტექტირებული ბრენდი ნამდვილად უნდა ემთხვეოდეს ჩვენი
+// პროდუქტის საკუთარ brand ველს, სანამ სურათს მივანიჭებთ — თორემ
+// შემთხვევითი SKU-დამთხვევა სხვა ბრენდის ნაწილთან არასწორ სურათს გვაძლევს
+function brandsMatch(ourBrand, autodocSupplierName) {
+  if (!ourBrand || !autodocSupplierName) return false;
+  const a = ourBrand.trim().toUpperCase();
+  const b = autodocSupplierName.trim().toUpperCase();
+  return a === b || a.includes(b) || b.includes(a);
 }
 
 async function getImageFromCrossRefs(articleId) {
@@ -41,7 +52,7 @@ async function getImageFromCrossRefs(articleId) {
 (async () => {
   // no image, autodoc-eligible, not local brand
   const products = await prisma.$queryRaw`
-    SELECT id, sku, "nameKa"
+    SELECT id, sku, brand, "nameKa"
     FROM products
     WHERE "isActive" = true
     AND (images IS NULL OR images = '{}')
@@ -54,13 +65,22 @@ async function getImageFromCrossRefs(articleId) {
   `;
 
   console.log(`სულ ${products.length} პროდუქტი enrichment-სთვის`);
-  let updated = 0, notFound = 0;
+  let updated = 0, notFound = 0, brandMismatch = 0;
 
   for (const p of products) {
-    const articleId = await getArticleId(p.sku);
-    if (!articleId) { notFound++; await sleep(300); continue; }
+    const found = await getArticleId(p.sku);
+    if (!found) { notFound++; await sleep(300); continue; }
 
-    const imageUrl = await getImageFromCrossRefs(articleId);
+    // 🛡️ დაცვა: SKU-ს Autodoc-ის ავტოდეტექტირებული ბრენდი უნდა ემთხვეოდეს
+    // ჩვენი პროდუქტის რეალურ ბრენდს — თუ არა, ხელით ატვირთვას ვტოვებთ
+    if (!brandsMatch(p.brand, found.supplierName)) {
+      brandMismatch++;
+      console.log(`⏭️  ${p.sku} გამოტოვებულია — ბრენდი არ ემთხვევა (ჩვენი: "${p.brand}", Autodoc: "${found.supplierName}")`);
+      await sleep(300);
+      continue;
+    }
+
+    const imageUrl = await getImageFromCrossRefs(found.articleId);
     if (!imageUrl) { notFound++; await sleep(300); continue; }
 
     await prisma.$executeRaw`
@@ -68,10 +88,10 @@ async function getImageFromCrossRefs(articleId) {
       WHERE id = ${p.id}
     `;
     updated++;
-    console.log(`✅ ${p.sku} → ${imageUrl.split('/').pop()}`);
+    console.log(`✅ ${p.sku} (${p.brand}) → ${imageUrl.split('/').pop()}`);
     await sleep(400);
   }
 
-  console.log(`\n=== დასრულდა: ${updated} განახლდა, ${notFound} ვერ მოიძებნა ===`);
+  console.log(`\n=== დასრულდა: ${updated} განახლდა, ${brandMismatch} ბრენდი არ ემთხვეოდა (ხელით ასატვირთი), ${notFound} ვერ მოიძებნა ===`);
   await prisma.$disconnect();
 })();
